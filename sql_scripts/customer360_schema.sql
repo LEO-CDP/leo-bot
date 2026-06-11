@@ -189,6 +189,48 @@ CREATE INDEX IF NOT EXISTS idx_places_geom ON places USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_places_pluscode ON places (pluscode);
 CREATE INDEX IF NOT EXISTS idx_places_region ON places (region_id);
 
+
+-- ============================================================
+-- weather data
+-- ============================================================
+CREATE TABLE IF NOT EXISTS weather_data (
+    id BIGSERIAL PRIMARY KEY,
+
+    -- Column to store the full, original JSON data (good for auditing/future extraction)
+    original_data JSONB NOT NULL,
+
+    -- Normalized Location Fields (Extracted from "location" object)
+    location_name TEXT NOT NULL,    -- Name of the location (e.g., "Ho Chi Minh City")
+    city TEXT NOT NULL,
+    country TEXT,
+    time_zone TEXT,
+    
+    -- Storing coordinates as numeric types for accuracy
+    latitude DECIMAL(9, 6) NOT NULL,
+    longitude DECIMAL(9, 6) NOT NULL,
+
+    -- PostGIS GEOGRAPHY column for fast, precise GPS-based lookups
+    -- We use GEOGRAPHY (WGS 84, SRID 4326) for global distance calculations.
+    geog GEOGRAPHY(Point, 4326) NOT NULL,
+
+    -- pgvector column for semantic search queries (e.g., "What's the weather like in a tropical city?")
+    -- Using VECTOR(768) as a common dimension for embeddings (adjust as needed for your model)
+    weather_embedding VECTOR(768)
+);
+
+-- Standard B-tree indexes for filtering and exact text matching
+CREATE INDEX IF NOT EXISTS idx_weather_location_name ON weather_data (location_name);
+CREATE INDEX IF NOT EXISTS idx_weather_city ON weather_data (city);
+
+-- GiST Index for accelerated geospatial queries (e.g., "Find all locations within 10km of X, Y")
+CREATE INDEX IF NOT EXISTS idx_weather_geog ON weather_data USING GIST (geog);
+
+-- IVFFlat Index for efficient Nearest Neighbor search (similarity lookup for pgvector)
+-- The number of lists (100) should be tuned based on the total number of rows.
+CREATE INDEX IF NOT EXISTS idx_weather_embedding ON weather_data USING IVFFLAT (weather_embedding) WITH (lists = 100);
+
+
+
 -- ============================================================
 -- System Users
 -- ============================================================

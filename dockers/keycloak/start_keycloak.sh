@@ -8,9 +8,10 @@ set -e
 SCRIPT_DIR="$(dirname "$0")"
 ENV_FILE="./dockers/keycloak/keycloak.env"
 CONTAINER_NAME="keycloak"
+VLAN_NAME="leo-vlan"
 VOLUME_NAME="keycloak_data"
 
-# Load environment variables from .env file
+# Load environment variables
 if [ -f "$ENV_FILE" ]; then
   echo -e "\e[36m📄 Loading environment from $ENV_FILE\e[0m"
   export $(grep -v '^#' "$ENV_FILE" | xargs)
@@ -50,7 +51,7 @@ else
 fi
 
 # ==========================================
-# 🧱 CREATE VOLUME (for persistent data)
+# 🧱 CREATE VOLUME
 # ==========================================
 
 if ! docker volume inspect "$VOLUME_NAME" >/dev/null 2>&1; then
@@ -66,20 +67,31 @@ echo -e "\n\e[32m🚀 Starting Keycloak ${KEYCLOAK_VERSION:-26.4.2} on port ${KE
 
 docker run -d \
   --name "$CONTAINER_NAME" \
+  --network $VLAN_NAME \
+  --add-host=host.docker.internal:host-gateway \
   -p ${KEYCLOAK_PORT:-8080}:8080 \
   -e TZ=Asia/Ho_Chi_Minh \
   -v /etc/localtime:/etc/localtime:ro \
   -v /etc/timezone:/etc/timezone:ro \
+  -v $(pwd)/dockers/keycloak/themes/leobot:/opt/keycloak/themes/leobot \
   -v "$VOLUME_NAME":/opt/keycloak/data \
+  \
   -e KC_BOOTSTRAP_ADMIN_USERNAME=${KC_BOOTSTRAP_ADMIN_USERNAME:-admin} \
   -e KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin} \
+  \
   -e KC_PROXY=${KC_PROXY:-edge} \
+  -e KC_PROXY_HEADERS=${KC_PROXY_HEADERS:-xforwarded} \
   -e KC_HOSTNAME_STRICT=${KC_HOSTNAME_STRICT:-false} \
   -e KC_HOSTNAME_STRICT_HTTPS=${KC_HOSTNAME_STRICT_HTTPS:-true} \
   -e KC_HTTP_ENABLED=${KC_HTTP_ENABLED:-true} \
   -e KC_HTTP_RELATIVE_PATH=${KC_HTTP_RELATIVE_PATH:-/} \
   -e KC_HOSTNAME_URL=${KC_HOSTNAME_URL:-https://leoid.example.com} \
-  -e KC_PROXY_HEADERS=${KC_PROXY_HEADERS:-xforwarded} \
+  \
+  -e KC_DB=postgres \
+  -e KC_DB_URL="jdbc:postgresql://${PG_HOST:-postgres}:${PG_PORT:-5432}/${PG_DATABASE:-keycloak}" \
+  -e KC_DB_USERNAME=${PG_USERNAME:-keycloak} \
+  -e KC_DB_PASSWORD=${PG_PASSWORD:-password} \
+  \
   quay.io/keycloak/keycloak:${KEYCLOAK_VERSION:-26.4.2} \
   start
 
@@ -92,4 +104,17 @@ echo -e "\e[32m🌐 Access Keycloak at: ${KC_HOSTNAME_URL:-https://leoid.example
 echo -e "\e[36m🪵 Showing live logs (Ctrl+C to exit)\e[0m\n"
 
 sleep 3
+
+# --- Setting restart policy
+if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+  echo "Setting restart policy for: $CONTAINER_NAME"
+  docker update --restart=unless-stopped "$CONTAINER_NAME"
+  echo "Done."
+else
+  echo "Container '$CONTAINER_NAME' not found."
+  exit 1
+fi
+
+# wait to show logs
+sleep 1
 docker logs -f "$CONTAINER_NAME"

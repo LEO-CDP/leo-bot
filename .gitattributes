@@ -1,0 +1,22 @@
+# Default: normalize text files to LF
+* text=auto eol=lf
+
+# Explicit file types
+*.sh     text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.json   text eol=lf
+*.md     text eol=lf
+*.js     text eol=lf
+*.ts     text eol=lf
+*.java   text eol=lf
+*.py     text eol=lf
+
+# Windows-specific
+*.bat    text eol=crlf
+*.ps1    text eol=crlf
+
+# Binary files
+*.png    binary
+*.jpg    binary
+*.zip    binary

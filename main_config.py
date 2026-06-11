@@ -8,14 +8,30 @@ from redis import Redis
 from fastapi import Depends, FastAPI, HTTPException
 from leoai.ai_core import get_embedding_model
 import logging
+import structlog
 
 # Load environment variables from .env file
 load_dotenv(override=True)
+
+# --- Loggin ---
+def setup_logging():
+    logging.basicConfig(
+        format="%(message)s",
+        level=logging.INFO
+    )
+    structlog.configure(
+        processors=[
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.JSONRenderer()
+        ]
+    )
+
 
 # --- General ---
 VERSION = "1.0.0"
 SERVICE_NAME = f"LEO BOT VERSION: {VERSION}"
 LEOBOT_DEV_MODE = os.getenv("LEOBOT_DEV_MODE") == "true"
+CDP_TRACKING = os.getenv("CDP_TRACKING") == "true"
 HOSTNAME = os.getenv("HOSTNAME", "localhost")
 
 # --- Rate Limiting ---
@@ -23,8 +39,8 @@ RATE_LIMIT_MAX_MESSAGES = 20  # max messages
 RATE_LIMIT_WINDOW_SECONDS = 60  # time window
 
 # --- Redis ---
-REDIS_HOST = os.getenv("REDIS_USER_SESSION_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_USER_SESSION_PORT", 6379))
+REDIS_HOST = os.getenv("REDIS_USER_SESSION_HOST") or "localhost"
+REDIS_PORT = int(os.getenv("REDIS_USER_SESSION_PORT") or 6379)
 REDIS_CLIENT = Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 # --- Facebook Integration ---
@@ -42,9 +58,6 @@ ZALO_OA_ACCESS_TOKEN = os.getenv("ZALO_OA_ACCESS_TOKEN")
 BASE_DIR = Path(__file__).resolve().parent
 RESOURCES_DIR = BASE_DIR / "resources"
 TEMPLATES_DIR = RESOURCES_DIR / "templates"
-
-# logging
-logging.basicConfig(level=logging.INFO)
 
 # lifespan of FastAPI app
 @asynccontextmanager

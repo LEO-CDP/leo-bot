@@ -35,16 +35,20 @@ class RAGAgent:
         keywords: Optional[List[str]] = None,
     ) -> str:
         try:
-            # 1️⃣ Save user message (sync)
-            self.db.save_chat_message(
-                user_id=user_id,
-                role="user",
-                message=user_message,
-                cdp_profile_id=cdp_profile_id,
-                persona_id=persona_id,
-                touchpoint_id=touchpoint_id,
-                keywords=keywords,
-            )
+            try:
+                # 1️⃣ Save user message (sync)
+                logger.info(f"🧠 insert user message: {user_message}")
+                await self.db.save_chat_message(
+                    user_id=user_id,
+                    role="user",
+                    message=user_message,
+                    cdp_profile_id=cdp_profile_id,
+                    persona_id=persona_id,
+                    touchpoint_id=touchpoint_id,
+                    keywords=keywords,
+                )
+            except Exception as e:
+                logger.error(f"❌ Failed to save user message to DB: {e}")
 
             # 2️⃣ Build summarized context (async)
             summarized_context = await self.context.build_context_summary(
@@ -70,7 +74,8 @@ class RAGAgent:
 
             # 6️⃣ Save AI response
             if prompt_router.purpose == "generate_text":
-                self.db.save_chat_message(
+                logger.info(f"🧠 insert bot message: {final_answer}")
+                await self.db.save_chat_message(
                     user_id, "bot", final_answer, cdp_profile_id, persona_id, touchpoint_id
                 )
 

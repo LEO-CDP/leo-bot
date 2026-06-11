@@ -1,78 +1,183 @@
-/env
-.env
-/local_data
-/data
-*/data/*
-
-# GenAI models
-models
-./models/*
-
-
-# Excel data file
-*.xlsx
-*.db 
-*.zip
-
-# test data in CSV
-*.csv
-
-# jupyter notebook 
-.ipynb_checkpoints
-.virtual_documents
-
-# Byte-compiled / optimized / DLL files
+# ===========================
+#   PYTHON & VENV
+# ===========================
 __pycache__/
 *.py[cod]
-
-# C extensions
 *.so
+*.pyd
+*.pyo
+*.pyc
 
-# Distribution / packaging
-bin/
+# Virtual environments
+.env
+.venv
+venv/
+env/
+ENV/
+
+# VS Code virtual docs
+.virtual_documents
+
+# ===========================
+#   PROJECT DATA
+# ===========================
+# Generic data dirs
+data/
+*/data/*
+local_data/
+qdrant_storage/
+
+# Artefact files
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.db
+*.sqlite
+*.sqlite3
+*.zip
+*.tar
+*.gz
+
+# Raw datasets
+*.parquet
+*.feather
+
+# ===========================
+#   GENAI & ML MODELS
+# ===========================
+models/
+models/*
+
+# HuggingFace cache
+huggingface/
+huggingface_cache/
+~/.cache/huggingface/
+
+# Transformers, Sentence-Transformers caches
+~/.cache/torch/
+~/.cache/transformers/
+
+# Llama.cpp model quantizations (GGUF, GGML)
+*.gguf
+*.ggml
+
+# ONNX / TensorRT / compiled models
+*.onnx
+*.plan
+
+# ===========================
+#   SECRETS & CONFIG
+# ===========================
+# Environment variables
+.env
+.env.*
+*.env
+
+# Credentials
+application_default_credentials.json
+*.pem
+*.key
+*.crt
+*.p12
+*.token
+token.json
+
+# Google / GCP auth
+.gcloud/
+.cloud/
+
+# AWS
+.aws/
+
+# ===========================
+#   EDITORS / IDE
+# ===========================
+# VS Code
+.vscode/
+.history/
+
+# JetBrains
+.idea/
+*.iml
+
+# ===========================
+#   JUPYTER
+# ===========================
+.ipynb_checkpoints/
+*.ipynb
+
+# Local notebook outputs
+**/.ipynb_checkpoints/**
+**/*.ipynb
+
+# ===========================
+#   BUILD & PACKAGING
+# ===========================
 build/
-develop-eggs/
 dist/
+sdist/
+develop-eggs/
+*.egg-info/
+*.egg
 eggs/
+parts/
+var/
 lib/
 lib64/
-parts/
-sdist/
-var/
-*.egg-info/
+bin/
+pip-wheel-metadata/
+
 .installed.cfg
-*.egg
+MANIFEST
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-.tox/
-.coverage
-.cache
-nosetests.xml
-coverage.xml
-
-# Translations
-*.mo
-
-# Mr Developer
-.mr.developer.cfg
-.project
-.pydevproject
-
-# Rope
-.ropeproject
-
-# Django stuff:
+# ===========================
+#   LOGS & TEMP
+# ===========================
 *.log
-*.pot
+logs/
+tmp/
+temp/
+*.tmp
 
-# Sphinx documentation
+# ===========================
+#   TEST / COVERAGE
+# ===========================
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.coverage
+.cache/
+pytest_cache/
+htmlcov/
+
+# ===========================
+#   DOCUMENTATION
+# ===========================
 docs/_build/
-Core/__pycache__/
+
+# ===========================
+#   AIRFLOW (LOCAL)
+# ===========================
+airflow/airflow.db
+airflow/airflow.cfg
+airflow/logs/
+airflow/plugins/__pycache__/
+
+# ===========================
+#   OPTIONAL: NODE (if UI)
+# ===========================
+node_modules/
+*.map
+
+# ===========================
+#   PROJECT-SPECIFIC JUNK
+# ===========================
 leoai/ml-1m.zip.1
 leoai/ml-1m.zip.2
-application_default_credentials.json
 
+Core/__pycache__/
+
+data_windy/
+data_windy/**

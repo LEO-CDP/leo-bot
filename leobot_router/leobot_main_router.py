@@ -6,6 +6,7 @@ from leoai.leo_datamodel import Message
 from leoai.rag_agent import RAGAgent
 
 from main_config import (
+    CDP_TRACKING,
     HOSTNAME,
     LEOBOT_DEV_MODE,
     REDIS_CLIENT,
@@ -52,23 +53,39 @@ async def index(request: Request):
     Loads from Jinja2 template (index.html).
     """
     ts = int(time.time())
-    data = {"request": request, "HOSTNAME": HOSTNAME, "LEOBOT_DEV_MODE": LEOBOT_DEV_MODE, "timestamp": ts}
+    data = {"request": request, "HOSTNAME": HOSTNAME,
+            "LEOBOT_DEV_MODE": LEOBOT_DEV_MODE, "CDP_TRACKING": CDP_TRACKING, "timestamp": ts}
     templates = request.app.state.templates
     return templates.TemplateResponse("index.html", data)
 
-
+# === demo-chatbot-ishop ===
 @router.get("/_leoai/demo-chatbot-ishop", response_class=HTMLResponse)
 async def demo_chat_in_ishop(request: Request):
     """
     Demo chatbot page for iShop UI.
     """
     ts = int(time.time())
-    data = {"request": request, "HOSTNAME": HOSTNAME, "LEOBOT_DEV_MODE": LEOBOT_DEV_MODE, "timestamp": ts}
+    data = {"request": request, "HOSTNAME": HOSTNAME,
+            "LEOBOT_DEV_MODE": LEOBOT_DEV_MODE, "timestamp": ts}
     templates = request.app.state.templates
     return templates.TemplateResponse("demo-chatbot-ishop.html", data)
 
+# === chat-with-docss ===
+@router.get("/chat-with-docs", response_class=HTMLResponse)
+@router.get("/_leoai/chat-with-docs", response_class=HTMLResponse)
+async def chat_with_docs(request: Request):
+    """
+    Demo chatbot chat-with-docs
+    """
+    ts = int(time.time())
+    data = {"request": request, "HOSTNAME": HOSTNAME,
+            "LEOBOT_DEV_MODE": LEOBOT_DEV_MODE, "timestamp": ts}
+    templates = request.app.state.templates
+    return templates.TemplateResponse("chat-with-docs.html", data)
+
 
 # === Health Check Routes ===
+
 @router.get("/ping", response_class=PlainTextResponse)
 @router.get("/_leoai/ping", response_class=PlainTextResponse)
 async def ping():
@@ -153,5 +170,3 @@ async def handle_chat(msg: Message):
         answer_in_format=msg.answer_in_format,
     )
     return {"question": msg.question, "answer": answer, "visitor_id": visitor_id, "error_code": 0}
-
-

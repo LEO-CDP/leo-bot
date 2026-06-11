@@ -1,0 +1,32 @@
+body {
+  font-family: "Inter", sans-serif;
+  background: linear-gradient(145deg, #f2f6fc, #d9e2ec);
+  color: #222;
+}
+
+#kc-header {
+  text-align: center;
+  margin-top: 40px;
+}
+
+.leobot-logo {
+  width: 120px;
+  height: auto;
+  margin-bottom: 10px;
+}
+
+#kc-form-wrapper {
+  max-width: 420px;
+  margin: 0 auto;
+  background: white;
+  padding: 32px;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+
+#kc-footer {
+  margin-top: 60px;
+  text-align: center;
+  font-size: 0.85em;
+  color: #666;
+}

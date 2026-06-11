@@ -9,7 +9,6 @@ from psycopg.types.json import Jsonb
 from leoai.ai_core import GeminiClient, get_embedding_model
 from leoai.db_utils import get_pg_conn
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ai_index")
 
 DATABASE_URL = os.getenv( "POSTGRES_URL", "postgresql://postgres:password@localhost:5432/customer360")

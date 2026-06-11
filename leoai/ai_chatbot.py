@@ -15,7 +15,6 @@ from leoai.ai_core import GeminiClient
 from google.genai.types import Schema
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # to use local model "Mistral-7B", export LEOAI_LOCAL_MODEL=true

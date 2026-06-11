@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 # Local configuration
-from main_config import RESOURCES_DIR, TEMPLATES_DIR, leobot_lifespan
+from main_config import RESOURCES_DIR, TEMPLATES_DIR, leobot_lifespan, setup_logging
 
 # Inbound routers
 from leobot_router.leobot_main_router import router as main_router
@@ -20,7 +20,7 @@ from leobot_router.leobot_zalo_router import router as zalo_router
 from leobot_router.leobot_admin_router import keycloak_enabled, router as admin_router
 
 # Logging setup
-logging.basicConfig(level=logging.INFO)
+setup_logging()
 logger = logging.getLogger("leobot_app")
 
 

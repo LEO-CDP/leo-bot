@@ -1,0 +1,10 @@
+:root {
+  --pf-global--primary-color--100: #1976d2 !important;
+  --pf-global--link--Color: #1565c0 !important;
+}
+
+.pf-c-brand {
+  content: url("https://logowik.com/content/uploads/images/leo1161.jpg") !important;
+  width: 120px !important;
+  height: auto !important;
+}

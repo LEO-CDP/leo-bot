@@ -2,6 +2,7 @@
 
 # --- Docker configs ---
 CONTAINER_NAME="pgsql16_vector"
+VLAN_NAME="leo-vlan"
 DATA_VOLUME="pgdata_vector"
 
 # --- POSTGRES config ---
@@ -12,7 +13,7 @@ TARGET_DB="customer360"
 HOST_PORT=5432
 
 # --- SQL schema config ---
-SCHEMA_VERSION=251027
+SCHEMA_VERSION=251203
 SCHEMA_DESCRIPTION="init database schema customer360 for leo bot in CDP and chatbot for end user"
 SQL_FILE_PATH="./sql_scripts/customer360_schema.sql"
 
@@ -61,15 +62,19 @@ else
     docker volume create "$DATA_VOLUME"
   fi
 
+  # docker network ls | grep leo-vlan || docker network create leo-vlan
+
   echo "🚀 Launching new PostgreSQL container '${CONTAINER_NAME}'..."
   docker run -d \
-    --name $CONTAINER_NAME \
-    -e POSTGRES_USER=$POSTGRES_USER \
-    -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
-    -e POSTGRES_DB=$DEFAULT_DB \
-    -p $HOST_PORT:5432 \
-    -v $DATA_VOLUME:/var/lib/postgresql/data \
+    --name "$CONTAINER_NAME" \
+    --network "$VLAN_NAME" \
+    -e POSTGRES_USER="$POSTGRES_USER" \
+    -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+    -e POSTGRES_DB="$DEFAULT_DB" \
+    -p "$HOST_PORT:5432" \
+    -v "$DATA_VOLUME:/var/lib/postgresql/data" \
     postgis/postgis:16-3.5
+
 
   wait_for_postgres
 
@@ -167,6 +172,16 @@ TABLES=("chat_messages" "chat_message_embeddings" "places" "schema_migrations" "
 for table in "${TABLES[@]}"; do
   docker exec -u postgres $CONTAINER_NAME psql -d $TARGET_DB -tc "SELECT 1 FROM pg_tables WHERE tablename = '$table'" | grep -q 1 || { echo "❌ Table '$table' missing"; exit 1; }
 done
+
+# --- Setting restart policy
+if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+  echo "Setting restart policy for: $CONTAINER_NAME"
+  docker update --restart=unless-stopped "$CONTAINER_NAME"
+  echo "Done."
+else
+  echo "Container '$CONTAINER_NAME' not found."
+  exit 1
+fi
 
 echo "✅ PostgreSQL 16 + PostGIS + pgvector is ready."
 echo "   ➜ DB: $TARGET_DB"

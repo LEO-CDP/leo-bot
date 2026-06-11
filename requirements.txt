@@ -64,3 +64,7 @@ python-jose[cryptography]    # JWT handling for auth tokens
 
 # === Performance Monitoring ===
 prometheus-fastapi-instrumentator
+
+# Retry + exponential backoff, Logging JSON
+tenacity 
+structlog

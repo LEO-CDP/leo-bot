@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat with Docs | AI Agent</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* --- Global Settings --- */
+      body {
+        background-color: #f4f6f9;
+        font-family: "Segoe UI", "Roboto", "Helvetica Neue", sans-serif;
+        color: #333;
+      }
+
+      /* --- Card Styling --- */
+      .main-card {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        overflow: hidden; /* Keeps headers corners rounded */
+      }
+      .card-header {
+        background-color: #fff;
+        border-bottom: 1px solid #f0f0f0;
+        padding: 20px 25px;
+      }
+      .card-body {
+        padding: 30px; /* More padding for spacious feel */
+      }
+
+      /* --- Input Elements --- */
+      .url-entry {
+        transition: all 0.2s ease;
+      }
+      .form-control:focus {
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.25);
+        border-color: #667eea;
+      }
+      .btn-think {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        color: white;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      .btn-think:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(118, 75, 162, 0.4);
+        color: white;
+      }
+      .btn-think:active {
+        transform: translateY(0);
+      }
+
+      /* --- Response Area (The Main Fix) --- */
+      .response-area {
+        display: none; /* Hidden by default */
+        background-color: #f8f9fa; /* Light grey paper look */
+        color: #2d3436;
+        border-radius: 12px;
+        padding: 25px;
+        margin-top: 20px;
+        border: 1px solid #e9ecef;
+
+        /* Typography */
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        font-size: 1rem;
+        line-height: 1.6; /* Improves reading flow */
+      }
+
+      /* Formatting parsed HTML elements inside Response Area */
+      .response-area p {
+        margin-bottom: 1rem !important; /* Restore standard spacing */
+      }
+
+      .response-area strong {
+        color: #2c3e50;
+        font-weight: 700;
+      }
+
+      /* List Styling */
+      .response-area ul {
+        padding-left: 20px;
+        margin-bottom: 1rem;
+      }
+      .response-area li {
+        margin-bottom: 0.5rem;
+      }
+      /* Nested lists spacing */
+      .response-area li > ul {
+        margin-top: 0.5rem;
+        border-left: 3px solid #e9ecef; /* Visual guide for nested items */
+        padding-left: 15px;
+      }
+
+      /* Link Styling */
+      .response-area a {
+        color: #0d6efd;
+        text-decoration: none;
+        font-weight: 500;
+
+        /* CRITICAL: Wraps long URLs so they don't break mobile view */
+        word-break: break-word;
+        overflow-wrap: break-word;
+      }
+      .response-area a:hover {
+        text-decoration: underline;
+        color: #0a58ca;
+      }
+
+      /* Optional: Make "[SOURCE...]" links look smaller/cleaner */
+      .response-area a[href^="http"] {
+        font-size: 0.9em;
+        background-color: rgba(13, 110, 253, 0.05);
+        padding: 2px 5px;
+        border-radius: 4px;
+      }
+    </style>
+
+
+<!-- Mixpanel -->
+<script type="text/javascript">
+  (function(e,c){if(!c.__SV){var l,h;window.mixpanel=c;c._i=[];c.init=function(q,r,f){function t(d,a){var g=a.split(".");2==g.length&&(d=d[g[0]],a=g[1]);d[a]=function(){d.push([a].concat(Array.prototype.slice.call(arguments,0)))}}var b=c;"undefined"!==typeof f?b=c[f]=[]:f="mixpanel";b.people=b.people||[];b.toString=function(d){var a="mixpanel";"mixpanel"!==f&&(a+="."+f);d||(a+=" (stub)");return a};b.people.toString=function(){return b.toString(1)+".people (stub)"};l="disable time_event track track_pageview track_links track_forms track_with_groups add_group set_group remove_group register register_once alias unregister identify name_tag set_config reset opt_in_tracking opt_out_tracking has_opted_in_tracking has_opted_out_tracking clear_opt_in_out_tracking start_batch_senders start_session_recording stop_session_recording people.set people.set_once people.unset people.increment people.append people.union people.track_charge people.clear_charges people.delete_user people.remove".split(" ");
+  for(h=0;h<l.length;h++)t(b,l[h]);var n="set set_once union unset remove delete".split(" ");b.get_group=function(){function d(p){a[p]=function(){b.push([g,[p].concat(Array.prototype.slice.call(arguments,0))])}}for(var a={},g=["get_group"].concat(Array.prototype.slice.call(arguments,0)),m=0;m<n.length;m++)d(n[m]);return a};c._i.push([q,r,f])};c.__SV=1.2;var k=e.createElement("script");k.type="text/javascript";k.async=!0;k.src="undefined"!==typeof MIXPANEL_CUSTOM_LIB_URL?MIXPANEL_CUSTOM_LIB_URL:"file:"===
+  e.location.protocol&&"//cdn.mxpnl.com/libs/mixpanel-2-latest.min.js".match(/^\/\//)?"https://cdn.mxpnl.com/libs/mixpanel-2-latest.min.js":"//cdn.mxpnl.com/libs/mixpanel-2-latest.min.js";e=e.getElementsByTagName("script")[0];e.parentNode.insertBefore(k,e)}})(document,window.mixpanel||[])
+
+  mixpanel.init('90186f03df50f10037e58f0d25d6a2e7', {
+    autocapture: true,
+    record_sessions_percent: 100,
+  })
+</script>
+
+
+<!--Countly -->
+<script type='text/javascript'>
+//some default pre init
+var Countly = Countly || {};
+Countly.q = Countly.q || [];
+
+//provide countly initialization parameters
+Countly.app_key = '1ae972239b35cec5fcd379b275c2c4b0c5faa2f0';
+Countly.url = 'https://leobot-7ee6df9479a97.flex.countly.com';
+
+Countly.q.push(['track_sessions']);
+Countly.q.push(['track_pageview']);
+Countly.q.push(['track_clicks']);
+Countly.q.push(['track_scrolls']);
+Countly.q.push(['track_errors']);
+Countly.q.push(['track_links']);
+Countly.q.push(['track_forms']);
+Countly.q.push(['collect_from_forms']);
+
+//load countly script asynchronously
+(function() {
+   var cly = document.createElement('script'); cly.type = 'text/javascript';
+   cly.async = true;
+   //enter url of script here
+   cly.src = 'https://cdnjs.cloudflare.com/ajax/libs/countly-sdk-web/20.4.0/countly.min.js';
+   cly.onload = function(){Countly.init()};
+   var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(cly, s);
+})();
+</script>
+
+  </head>
+  <body>
+    <div class="container py-5">
+      <div class="row justify-content-center">
+        <div class="col-lg-8">
+          <div class="card main-card">
+            <div
+              class="card-header d-flex justify-content-between align-items-center"
+            >
+              <h4 class="mb-0">
+                <i class="fas fa-robot text-primary me-2"></i>Multi-Source Chat
+              </h4>
+              <span class="badge bg-light text-dark">v1.0</span>
+            </div>
+
+            <div class="card-body p-4">
+              <div class="mb-4">
+                <label
+                  class="form-label fw-bold text-secondary text-uppercase small"
+                  >Knowledge Base (Source URLs)</label
+                >
+                <div id="url-container"></div>
+                <button
+                  type="button"
+                  class="btn btn-outline-primary btn-sm mt-2"
+                  id="add-url-btn"
+                >
+                  <i class="fas fa-plus me-1"></i> Add Source URL
+                </button>
+              </div>
+
+              <hr class="my-4" />
+
+              <div class="mb-4">
+                <label
+                  for="question-input"
+                  class="form-label fw-bold text-secondary text-uppercase small"
+                  >Your Question</label
+                >
+                <textarea
+                  class="form-control"
+                  id="question-input"
+                  rows="4"
+                  placeholder="What would you like to know from the documents?"
+                ></textarea>
+              </div>
+
+              <div class="d-grid gap-2">
+                <button class="btn btn-think py-3" id="submit-btn">
+                  <i class="fas fa-brain me-2"></i> Think & Answer
+                </button>
+              </div>
+
+              <div id="response-container" class="mt-4">
+                <div id="response-area" class="response-area"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- leobot.chat-with-docs -->
+    <script src="https://{{ HOSTNAME }}/resources/js/leobot.chat-with-docs.js?_={{ timestamp }}"></script>
+
+
+<!--LEOCDP -->
+    <script>
+// (1) CDP_EVENT_OBSERVER: load JavaScript code for [chat-with-docs]
+(function() { 	
+	// Observer ID
+	window.leoObserverId = "6TJzCyotEHYBzse2a2rVl";
+	
+	// CDN of JS
+	window.leoObserverLogDomain = "datahub4uspa.leocdp.net";
+  	window.leoObserverCdnDomain = "cdn.jsdelivr.net/gh/USPA-Technology/leo-cdp-static-files@v0.9";
+	
+	// Data Touchpoint Metadata 
+	window.srcTouchpointName = encodeURIComponent(document.title);
+	window.srcTouchpointUrl = encodeURIComponent(location.href);
+
+	// the main proxy CDP JS
+	var leoproxyJsPath = '/js/leo-observer/leo.proxy.min.js';
+    var src = location.protocol + '//' + window.leoObserverCdnDomain + leoproxyJsPath;
+    var jsNode = document.createElement('script');
+    jsNode.async=true; jsNode.defer=true; jsNode.src = src;
+    var s = document.getElementsByTagName('script')[0];
+    s.parentNode.insertBefore(jsNode, s);
+})();
+
+var parseDataUTM = window.parseDataUTM || function () {
+    if (location.search.indexOf('utm_') > 0) {
+        var search = location.search.substring(1);
+        var json = decodeURI(search).replace(/"/g, '\\"').replace(/&/g, '","').replace(/=/g, '":"');
+        return JSON.parse('{"' + json + '"}');
+    }
+}
+	
+// (2) CDP EVENT OBSERVER: set-up all event tracking functions
+var LeoObserver = {};
+
+// (2.1) function to track View Event "PageView"
+LeoObserver.recordEventPageView = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordViewEvent("page-view",eventData);
+}
+
+// (2.2) function to track View Event "ContentView"
+LeoObserver.recordEventContentView = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordViewEvent("content-view",eventData);
+}
+
+// (2.3) function to track Action Event "Logout"
+LeoObserver.recordEventLogout = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordActionEvent("logout",eventData);
+}
+
+// (2.4) function to track Action Event "Search"
+LeoObserver.recordEventSearch = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordActionEvent("search",eventData);
+}
+
+// (2.5) function to track View Event "ItemView"
+LeoObserver.recordEventItemView = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordViewEvent("item-view",eventData);
+}
+
+// (2.6) function to track Action Event "ClickDetails"
+LeoObserver.recordEventClickDetails = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordActionEvent("click-details",eventData);
+}
+
+// (2.7) function to track Action Event "SubmitContact"
+LeoObserver.recordEventSubmitContact = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordActionEvent("submit-contact",eventData);
+}
+
+// (2.8) function to track Action Event "RegisterAccount"
+LeoObserver.recordEventRegisterAccount = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordActionEvent("register-account",eventData);
+}
+
+// (2.9) function to track Action Event "UserLogin"
+LeoObserver.recordEventUserLogin = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordActionEvent("user-login",eventData);
+}
+
+// (2.10) function to track Action Event "ShortLinkClick"
+LeoObserver.recordEventShortLinkClick = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordActionEvent("short-link-click",eventData);
+}
+
+// (2.11) function to track View Event "Login"
+LeoObserver.recordEventLogin = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordViewEvent("login-success",eventData);
+}
+
+// (2.12) function to track Action Event "AskQuestion"
+LeoObserver.recordEventAskQuestion = function(eventData) {
+	eventData = eventData ? eventData : {};
+	LeoObserverProxy.recordActionEvent("ask-question",eventData);
+}
+
+
+// (3) CDP EVENT OBSERVER is ready
+function leoObserverProxyReady(session) {
+   	// auto tracking when CDP JS is ready
+   	LeoObserver.recordEventPageView(parseDataUTM()) ;
+   	
+   	// set tracking CDP web visitor ID into all a[href] nodes
+	LeoObserverProxy.synchLeoVisitorId(function(vid){
+		var aNodes = document.querySelectorAll('a');
+		[].forEach.call(aNodes, function(aNode) {
+			var hrefUrl = aNode.href || "";
+            var check = hrefUrl.indexOf('http') >= 0 && hrefUrl.indexOf(location.host) < 0 ;
+			if(check) {
+				if(hrefUrl.indexOf('?') > 0) hrefUrl += ("&leosyn=" + vid);
+				else hrefUrl += ("?leosyn=" + vid);
+				aNode.href = hrefUrl;
+			}
+		});
+		if(typeof window.synchLeoCdpToGA4 === "function") {
+			window.synchLeoCdpToGA4(vid)
+		}
+	});
+}
+
+// track users when they click any link in the web-page
+LeoObserver.addTrackingAllLinks = function(){
+    setTimeout(function(){
+        document.querySelectorAll('a').forEach(function (e) {
+            e.addEventListener('click',function(){
+                var url = e.getAttribute('href') || "";
+                var data = {'url': url, 'link-text' : e.innerText };
+                LeoObserver.recordEventClickDetails(data)
+            })
+        })
+    },1500);
+}
+
+// track users when they click any button in the web-page
+LeoObserver.addTrackingAllButtons = function(){
+    setTimeout(function(){
+        document.querySelectorAll('button').forEach(function (e) {
+            e.addEventListener('click',function(){
+                var data = {'button-text' : e.innerText };
+                if( e.innerText.indexOf('Think') >=0 ) {
+                   data['question'] = $('#question-input').val();
+                }
+                LeoObserver.recordEventClickDetails(data)
+            })
+        })
+    },1600);
+}
+LeoObserver.addTrackingAllLinks();
+LeoObserver.addTrackingAllButtons();
+</script>
+  </body>
+</html>

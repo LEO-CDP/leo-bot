@@ -49,7 +49,7 @@ else
 fi
 
 # Start PGSQL instance
-bash ./start_pgsql_pgvector.sh
+bash ./dockers/pgsql/start_pgsql_pgvector.sh
 
 # Start new instance
 echo "🚀 Starting $APP_NAME on port $PORT..."

@@ -71,7 +71,7 @@ docker --version
 Then start the database:
 
 ```bash
-./start_pgsql_pgvector.sh
+./dockers/pgsql/start_pgsql_pgvector.sh
 ```
 
 This script:
@@ -85,7 +85,7 @@ This script:
 To **reset the database**, run:
 
 ```bash
-./start_pgsql_pgvector.sh --reset-db
+./dockers/pgsql/start_pgsql_pgvector.sh --reset-db
 ```
 
 You can connect manually:
@@ -107,19 +107,41 @@ pip install -r requirements.txt
 Create a `.env` file or edit `main_config.py`:
 
 ```bash
-LEOBOT_DEV_MODE=false
+# Core LEO BOT
+LEOBOT_DEV_MODE=true
 HOSTNAME=leobot.example.com
 POSTGRES_URL=postgresql://postgres:password@localhost:5432/customer360
 
-GOOGLE_APPLICATION_CREDENTIALS=your_credentials.json
-GEMINI_API_KEY=your_gemini_api_key
+# Google API
+GOOGLE_APPLICATION_CREDENTIALS= 
+GEMINI_API_KEY= 
 
-REDIS_USER_SESSION_HOST=127.0.0.1
-REDIS_USER_SESSION_PORT=6480
+# Set Redis HOST and PORT 
+REDIS_USER_SESSION_HOST=localhost
+REDIS_USER_SESSION_PORT=6379
 
-FB_VERIFY_TOKEN=
-FB_PAGE_ACCESS_TOKEN=your_facebook_access_token
-ZALO_OA_ACCESS_TOKEN=your_zalo_access_token
+# Set SMTP email information
+SMTP_HOST=""
+SMTP_PORT=587    
+SMTP_USER="" 
+SMTP_PASSWORD=""  
+USE_TLS=true 
+
+# in dev, disable HTTPS check certification
+PYTHONHTTPSVERIFY=1
+
+# Keycloak for leobot client at DEV mode
+KEYCLOAK_ENABLED=false
+KEYCLOAK_URL=https://leoid.example.com
+KEYCLOAK_REALM=master
+KEYCLOAK_CLIENT_ID=leobot
+KEYCLOAK_CLIENT_SECRET=""
+KEYCLOAK_CALLBACK_URL=https://leobot.example.com/_leoai/sso/callback
+KEYCLOAK_VERIFY_SSL=false
+
+# Set your Facebook Page Access here
+FB_VERIFY_TOKEN=""
+FB_PAGE_ACCESS_TOKEN=""
 ```
 
 **Gemini API setup:**

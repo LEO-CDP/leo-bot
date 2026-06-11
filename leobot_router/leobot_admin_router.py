@@ -22,7 +22,7 @@ load_dotenv(override=True)
 router = APIRouter()
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-keycloak_enabled = os.getenv("KEYCLOAK_ENABLED", "true").lower() in {"true", "1", "yes"}
+keycloak_enabled = os.getenv("KEYCLOAK_ENABLED", "false").lower() in {"true", "1", "yes"}
 verify_ssl = os.getenv("KEYCLOAK_VERIFY_SSL", "true").lower() not in {"false", "0", "no"}
 
 if not verify_ssl:
