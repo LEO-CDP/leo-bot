@@ -1,7 +1,12 @@
 
-from transformers import pipeline
+from leoai.ai_core import AIClient
 
 
-MODEL_NLP = "cardiffnlp/twitter-roberta-base-sentiment-latest"
-sentiment_pipe = pipeline("sentiment-analysis", model=MODEL_NLP, tokenizer=MODEL_NLP)
-
+def analyze_sentiment(text: str) -> str:
+    """Classify sentiment through the configured hosted AI provider."""
+    prompt = (
+        "Classify the sentiment of the following text as positive, neutral, or negative. "
+        "Return only the label.\n\n"
+        f"Text: {text}"
+    )
+    return AIClient().generate_content(prompt, temperature=0)

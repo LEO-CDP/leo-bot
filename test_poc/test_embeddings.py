@@ -1,4 +1,5 @@
 import numpy as np
+from _bootstrap import PROJECT_ROOT
 
 '''
 Trong học máy, một embedding là một đại diện vector cho một đối tượng. 
@@ -16,8 +17,8 @@ trong khi thành phần thứ hai đại diện cho số lần chữ "a", "b", "
 '''
 print(embed("cat")) # [3 1 0 1]
 
-from sentence_transformers import SentenceTransformer, util
-model = SentenceTransformer('sentence-transformers/msmarco-distilroberta-base-v2')
+from leoai.ai_core import get_embedding_model
+model = get_embedding_model()
 
 #Our knowledges we like to encode
 knowledges = ['I love cat', 'Cat hates dog']
@@ -41,14 +42,12 @@ knowledges_database = knowledges + ['The 2 kittens are gray',
                                     'All kittens love to eat chicken pate']
 knowledges_database_embedding = model.encode(knowledges_database)
 
-print("Similarity:", util.dot_score(query_embedding, knowledges_database_embedding))
+similarities = knowledges_database_embedding @ query_embedding
+print("Similarity:", similarities)
 
 print("Question: ", question, " \n The answers: ")
-hits = util.semantic_search(query_embedding, knowledges_database_embedding, top_k=2)
-hits = hits[0]      #Get the hits for the first query
-for hit in hits:
-    id = hit['corpus_id']   
-    print(knowledges_database[id], " (ID: {:g}) (Score: {:.4f})".format(id, hit['score']))
+for id in similarities.argsort()[-2:][::-1]:
+    print(knowledges_database[id], " (ID: {:g}) (Score: {:.4f})".format(id, similarities[id]))
 
 '''
 Question:  What does kitten eat ?  

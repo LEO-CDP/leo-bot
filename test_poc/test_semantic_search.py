@@ -1,17 +1,21 @@
 import asyncio
+import os
 import time
 import asyncpg
 import numpy as np
-from sentence_transformers import SentenceTransformer
+try:
+    from test_poc import _bootstrap
+except ModuleNotFoundError:
+    import _bootstrap
+from leoai.ai_core import get_embedding_model
 
 # ----------------------------
 # PGVector configuration
 # ----------------------------
-DB_DSN = "postgresql://username:password@localhost:5432/yourdb"  # change me
+DB_DSN = os.getenv("PGSQL_DB_URL", "postgresql://postgres:password@localhost:5433/leo360")
 
-MODEL_NAME = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
-model = SentenceTransformer(MODEL_NAME)
-VECTOR_DIM_SIZE = model.get_sentence_embedding_dimension()
+model = get_embedding_model()
+VECTOR_DIM_SIZE = model.dimensions
 
 # Corpus
 corpus_list = [

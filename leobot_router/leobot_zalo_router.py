@@ -22,8 +22,10 @@ async def zalo_webhook_handler(request: Request):
         event_name = body.get("event_name")
 
         if event_name == "user_send_text":
-            user_id = body["sender"]["id"]
-            user_msg = body["message"]["text"]
+            user_id = body.get("sender", {}).get("id")
+            user_msg = body.get("message", {}).get("text")
+            if not user_id or not user_msg:
+                return {"ok": True}
             logger.info(f"Zalo user '{user_id}' said: {user_msg}")
 
             ai_reply = await rag_agent.process_chat_message(
@@ -33,15 +35,15 @@ async def zalo_webhook_handler(request: Request):
                 cdp_profile_id="",
                 touchpoint_id="zalo",
             )
-            send_message_to_zalo(user_id, ai_reply)
+            await send_message_to_zalo(user_id, ai_reply)
     except Exception as e:
         logger.exception("Error in Zalo webhook handler")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": "Webhook processing failed"})
 
     return {"ok": True}
 
 
-def send_message_to_zalo(recipient_id: str, message_text: str):
+async def send_message_to_zalo(recipient_id: str, message_text: str):
     """
     Sends a message to a Zalo user via the OA API.
     """
@@ -50,13 +52,13 @@ def send_message_to_zalo(recipient_id: str, message_text: str):
     payload = {"recipient": {"user_id": recipient_id}, "message": {"text": message_text}}
 
     try:
-        with httpx.Client(timeout=10) as client:
-            res = client.post(url, params=params, json=payload)
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.post(url, params=params, json=payload)
             res.raise_for_status()
             data = res.json()
             if data.get("error") == 0:
                 logger.info(f"✅ Sent message to Zalo user {recipient_id}")
             else:
                 logger.warning(f"⚠️ Zalo API returned error: {data}")
-    except Exception as e:
-        logger.error(f"❌ Failed to send Zalo message to {recipient_id}: {e}")
+    except httpx.HTTPError:
+        logger.exception("❌ Failed to send Zalo message to %s", recipient_id)

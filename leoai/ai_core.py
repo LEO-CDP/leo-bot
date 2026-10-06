@@ -1,18 +1,16 @@
 import os
-
+import base64
 from functools import lru_cache
 import logging
 from dotenv import load_dotenv
-# Imports from the Google AI SDK
 from google import genai
 from google.genai import types
-from google.genai.types import GenerationConfig, Schema
+from google.genai.types import Schema
 from google.api_core.exceptions import GoogleAPIError
+from openai import OpenAI
+import numpy as np
 import json
-from typing import Dict, Any
-import torch
-from sentence_transformers import SentenceTransformer
-from transformers import AutoTokenizer
+from typing import Any, Dict, Literal, Sequence, overload
 
 from leoai.ai_data_schema import WEATHER_FORECAST_SCHEMA, GEOLOCATION_SCHEMA
 from leoai.domain.report_utils import generate_pie_chart
@@ -24,47 +22,211 @@ load_dotenv(override=True)
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Default fallback values
-DEFAULT_MODEL_ID = os.getenv("GEMINI_TEXT_MODEL_ID", "gemini-2.5-flash-lite")
-DEFAULT_EMBEDDING_MODEL_ID = os.getenv(
-    "DEFAULT_EMBEDDING_MODEL_ID", "intfloat/multilingual-e5-base")
+# Default provider/model configuration
+AI_PROVIDER = (os.getenv("AI_PROVIDER") or "google").strip().lower()
+EMBEDDING_PROVIDER = (os.getenv("EMBEDDING_PROVIDER") or AI_PROVIDER).strip().lower()
+DEFAULT_EMBEDDING_MODEL_ID = os.getenv("EMBEDDING_MODEL") or (
+    "gemini-embedding-001" if EMBEDDING_PROVIDER == "google"
+    else "text-embedding-3-small" if EMBEDDING_PROVIDER == "openai"
+    else "openai/text-embedding-3-small"
+)
+DEFAULT_EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "768"))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+TOUCHPOINT_EMBEDDING_PROVIDER = (
+    os.getenv("TOUCHPOINT_EMBEDDING_PROVIDER") or EMBEDDING_PROVIDER
+).strip().lower()
+TOUCHPOINT_EMBEDDING_MODEL = os.getenv("TOUCHPOINT_EMBEDDING_MODEL") or (
+    "gemini-embedding-001"
+    if TOUCHPOINT_EMBEDDING_PROVIDER == "google"
+    else "text-embedding-3-small"
+    if TOUCHPOINT_EMBEDDING_PROVIDER == "openai"
+    else "openai/text-embedding-3-small"
+)
+TOUCHPOINT_EMBEDDING_DIMENSIONS = int(
+    os.getenv("TOUCHPOINT_EMBEDDING_DIMENSIONS", "768")
+)
 
-# Error message used when required config is missing
-INIT_FAIL_MSG = "Both `model_name` and `api_key` must be provided or set in the environment."
+SUPPORTED_PROVIDERS = {"google", "openai", "openrouter"}
 JSON_TYPE = "application/json"
 
-# --- Device Configuration ---
-device = "cpu"
-if torch.cuda.is_available():
-    device = "cuda"
-elif torch.backends.mps.is_available():
-    device = "mps"
 
-# default embedding_model
+def _default_chat_model(provider: str) -> str:
+    provider_default = {
+        "google": os.getenv("GEMINI_TEXT_MODEL_ID") or "gemini-3.5-flash-lite",
+        "openai": "gpt-4.1-mini",
+        "openrouter": "openai/gpt-4.1-mini",
+    }[provider]
+    return os.getenv("AI_CHAT_MODEL") or provider_default
 
 
 @lru_cache(maxsize=1)
 def get_embedding_model():
-    """Lazy-Loading SentenceTransformer model once."""
-    logger.info(
-        f"Loading SentenceTransformer model '{DEFAULT_EMBEDDING_MODEL_ID}' on device: {device}...")
-    embedding_model = SentenceTransformer(
-        DEFAULT_EMBEDDING_MODEL_ID, device=device)
-    return embedding_model
+    """Return a lightweight adapter that requests embeddings from a configured API."""
+    return RemoteEmbeddingModel()
 
 
 @lru_cache(maxsize=1)
-def get_tokenizer():
-    """Lazy-Loading AutoTokenizer model once."""
-    tokenizer = AutoTokenizer.from_pretrained(DEFAULT_EMBEDDING_MODEL_ID)
-    return tokenizer
+def get_touchpoint_embedding_model():
+    """Return the dedicated touchpoint embedding adapter."""
+    return RemoteEmbeddingModel(
+        provider=TOUCHPOINT_EMBEDDING_PROVIDER,
+        model_name=TOUCHPOINT_EMBEDDING_MODEL,
+        dimensions=TOUCHPOINT_EMBEDDING_DIMENSIONS,
+    )
+
+
+@lru_cache(maxsize=1)
+def _get_api_client(provider: str, api_key: str) -> Any:
+    if provider == "google":
+        return genai.Client(api_key=api_key)
+    if provider == "openai":
+        return OpenAI(api_key=api_key)
+    if provider == "openrouter":
+        return OpenAI(
+            api_key=api_key,
+            base_url=os.getenv("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1",
+        )
+    raise ValueError(f"Unsupported AI provider '{provider}'.")
+
+
+def _provider_api_key(provider: str, *, embedding: bool = False) -> str:
+    if embedding and os.getenv("EMBEDDING_API_KEY"):
+        return os.environ["EMBEDDING_API_KEY"]
+    key_name = {
+        "google": "GEMINI_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+    }.get(provider)
+    if key_name is None:
+        raise ValueError(
+            f"Unsupported AI provider '{provider}'. Choose google, openai, or openrouter."
+        )
+    api_key = os.getenv(key_name)
+    if not api_key:
+        raise ValueError(f"{key_name} must be set to use the {provider} provider.")
+    return api_key
+
+
+class RemoteEmbeddingModel:
+    """Lightweight adapter over hosted embedding APIs."""
+
+    @overload
+    def encode(
+        self,
+        sentences: str,
+        batch_size: int = 32,
+        normalize_embeddings: bool = True,
+        convert_to_numpy: Literal[True] = True,
+        **kwargs: Any,
+    ) -> np.ndarray: ...
+
+    @overload
+    def encode(
+        self,
+        sentences: Sequence[str],
+        batch_size: int = 32,
+        normalize_embeddings: bool = True,
+        convert_to_numpy: Literal[True] = True,
+        **kwargs: Any,
+    ) -> np.ndarray: ...
+
+    @overload
+    def encode(
+        self,
+        sentences: str,
+        batch_size: int = 32,
+        normalize_embeddings: bool = True,
+        convert_to_numpy: Literal[False] = False,
+        **kwargs: Any,
+    ) -> list[float]: ...
+
+    @overload
+    def encode(
+        self,
+        sentences: Sequence[str],
+        batch_size: int = 32,
+        normalize_embeddings: bool = True,
+        convert_to_numpy: Literal[False] = False,
+        **kwargs: Any,
+    ) -> list[list[float]]: ...
+
+    def __init__(
+        self,
+        provider: str = EMBEDDING_PROVIDER,
+        model_name: str = DEFAULT_EMBEDDING_MODEL_ID,
+        dimensions: int = DEFAULT_EMBEDDING_DIMENSIONS,
+    ):
+        self.provider = provider
+        self.model_name = model_name
+        self.dimensions = dimensions
+
+    def encode(
+        self,
+        sentences: str | Sequence[str],
+        batch_size: int = 32,
+        normalize_embeddings: bool = True,
+        convert_to_numpy: bool = True,
+        **_: Any,
+    ):
+        is_single = isinstance(sentences, str)
+        texts = [sentences] if is_single else list(sentences)
+        if not texts:
+            empty = np.empty((0, self.dimensions), dtype=np.float32)
+            return empty if convert_to_numpy else empty.tolist()
+        if any(not isinstance(text, str) or not text.strip() for text in texts):
+            raise ValueError("Embedding inputs must be non-empty strings.")
+
+        api_key = _provider_api_key(self.provider, embedding=True)
+        client: Any = _get_api_client(self.provider, api_key)
+        vectors: list[list[float]] = []
+        for offset in range(0, len(texts), max(1, batch_size)):
+            batch = texts[offset:offset + max(1, batch_size)]
+            if self.provider == "google":
+                for text in batch:
+                    result = client.models.embed_content(
+                        model=self.model_name,
+                        contents=text,
+                        config=types.EmbedContentConfig(
+                            output_dimensionality=self.dimensions,
+                        ),
+                    )
+                    if not result.embeddings or result.embeddings[0].values is None:
+                        raise RuntimeError("Google GenAI returned an empty embedding.")
+                    vectors.append(result.embeddings[0].values)
+            else:
+                response = client.embeddings.create(
+                    model=self.model_name,
+                    input=batch,
+                    dimensions=self.dimensions,
+                )
+                vectors.extend(
+                    item.embedding for item in sorted(response.data, key=lambda item: item.index)
+                )
+
+        if len(vectors) != len(texts):
+            raise RuntimeError(
+                f"Embedding provider returned {len(vectors)} vectors for {len(texts)} inputs."
+            )
+        embeddings = np.asarray(vectors, dtype=np.float32)
+        if embeddings.shape != (len(texts), self.dimensions):
+            raise RuntimeError(
+                f"Expected embeddings shaped ({len(texts)}, {self.dimensions}), "
+                f"got {embeddings.shape}."
+            )
+        if normalize_embeddings:
+            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+            embeddings = np.divide(
+                embeddings, norms, out=np.zeros_like(embeddings), where=norms != 0
+            )
+
+        result = embeddings[0] if is_single else embeddings
+        return result if convert_to_numpy else result.tolist()
 
 
 # the helper function for default embedding_model
 def get_embed_texts(texts):
     """
-    Embed a list of texts using the SentenceTransformer model.
+    Embed a list of texts using the configured hosted embedding API.
 
     Args:
         texts (list[str]): List of text strings to embed.
@@ -76,68 +238,143 @@ def get_embed_texts(texts):
         logger.warning("embed_texts called with empty input list.")
         return []
 
-    try:
-        model = get_embedding_model()
-        # Ensure input is a list of strings
-        if isinstance(texts, str):
-            texts = [texts]
-
-        # Normalize whitespace and remove empty entries
-        texts = [t.strip() for t in texts if t and t.strip()]
-        if not texts:
-            logger.warning("All input texts were empty or whitespace.")
-            return []
-
-        logger.info(f"Embedding {len(texts)} texts on device: {model.device}")
-        embeddings = model.encode(
-            texts,
-            batch_size=16,
-            show_progress_bar=False,
-            normalize_embeddings=True,  # ensures cosine similarity compatibility
-            convert_to_numpy=True
-        )
-        return embeddings.tolist()
-
-    except Exception as e:
-        logger.exception(f"Failed to embed texts: {e}")
+    if isinstance(texts, str):
+        texts = [texts]
+    normalized_texts = [text.strip() for text in texts if text and text.strip()]
+    if not normalized_texts:
+        logger.warning("All input texts were empty or whitespace.")
         return []
+    return get_embedding_model().encode(
+        normalized_texts,
+        batch_size=16,
+        normalize_embeddings=True,
+    ).tolist()
 
 
 # check and init Google AI
 def is_gemini_model_ready():
-    isReady = isinstance(GEMINI_API_KEY, str)
-    if isReady:
-        return True
-    else:
-        return False
+    return bool(GEMINI_API_KEY)
 
 
-class GeminiClient:
+def is_ai_model_ready() -> bool:
+    key_name = {
+        "google": "GEMINI_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+    }.get(AI_PROVIDER)
+    return bool(key_name and os.getenv(key_name))
+
+
+class AIClient:
     """
-    A wrapper class for interacting with Google Gemini API.
-    Handles text generation via a specified model.
+    Provider-neutral text and multimodal generation client.
     """
 
-    def __init__(self, model_name: str = DEFAULT_MODEL_ID, api_key: str = GEMINI_API_KEY):
-        if not model_name or not api_key:
-            logger.critical(INIT_FAIL_MSG)
-            raise ValueError(INIT_FAIL_MSG)
+    def __init__(
+        self,
+        model_name: str | None = None,
+        api_key: str | None = None,
+        provider: str | None = None,
+    ):
+        self.provider = (provider or AI_PROVIDER).strip().lower()
+        if self.provider not in SUPPORTED_PROVIDERS:
+            raise ValueError(
+                f"Unsupported AI provider '{self.provider}'. Choose google, openai, or openrouter."
+            )
+        self.model_name = model_name or _default_chat_model(self.provider)
+        self.api_key = api_key or _provider_api_key(self.provider)
+        self.client: Any = _get_api_client(self.provider, self.api_key)
+        logger.info("%s AI client initialized with model '%s'", self.provider, self.model_name)
 
-        self.model_name = model_name
-        self.api_key = api_key
+    def _generate_response(
+        self,
+        prompt: str,
+        temperature: float = 0.6,
+        json_schema: Schema | dict | None = None,
+        image_bytes: bytes | None = None,
+        max_output_tokens: int | None = None,
+        system_instruction: str | None = None,
+    ) -> str:
+        if self.provider == "google":
+            config = types.GenerateContentConfig.model_validate({
+                "temperature": temperature,
+                "max_output_tokens": max_output_tokens,
+                "response_mime_type": JSON_TYPE if json_schema is not None else None,
+                "response_schema": json_schema,
+                "system_instruction": system_instruction,
+            })
+            contents: str | list[Any] = prompt
+            if image_bytes is not None:
+                contents = [
+                    types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                    prompt,
+                ]
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=contents,
+                config=config,
+            )
+            return (response.text or "").strip()
 
-        try:
-            self.client = genai.Client(api_key=self.api_key)
-            logger.info(
-                f"Gemini client initialized with model '{self.model_name}'")
-        except Exception as e:
-            logger.exception("Failed to initialize Gemini client.")
-            raise
+        content: Any = prompt
+        if image_bytes is not None:
+            image_data = base64.b64encode(image_bytes).decode("ascii")
+            content = [
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
+                },
+            ]
+        if json_schema is not None:
+            schema_data = (
+                json_schema.model_dump(mode="json", exclude_none=True)
+                if isinstance(json_schema, Schema)
+                else json_schema
+            )
+            content = (
+                f"{prompt}\n\nReturn a JSON object conforming to this schema:\n"
+                f"{json.dumps(schema_data, ensure_ascii=False)}"
+                if image_bytes is None
+                else [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"{prompt}\n\nReturn a JSON object conforming to this schema:\n"
+                            f"{json.dumps(schema_data, ensure_ascii=False)}"
+                        ),
+                    },
+                    content[1],
+                ]
+            )
+        request: dict[str, Any] = {
+            "model": self.model_name,
+            "messages": [{"role": "user", "content": content}],
+            "temperature": temperature,
+        }
+        if system_instruction:
+            request["messages"].insert(0, {
+                "role": "system", "content": system_instruction,
+            })
+        if json_schema is not None:
+            request["response_format"] = {"type": "json_object"}
+        if max_output_tokens is not None:
+            request["max_tokens"] = max_output_tokens
+        response = self.client.chat.completions.create(**request)
+        return (response.choices[0].message.content or "").strip()
 
     # text to text
-    def generate_content(self, prompt: str, temperature: float = 0.6, on_error: str = '') -> str:
+    def generate_content(
+        self,
+        prompt: str,
+        temperature: float = 0.6,
+        on_error: str = '',
+        max_output_tokens: int | None = None,
+        *,
+        system_instruction: str | None = None,
+    ) -> str:
         """
-        Generates text content from a given prompt using the Gemini API.
+        Generate text from a prompt using the configured AI provider.
 
         Args:
             prompt (str): The input prompt to send to the model.
@@ -148,18 +385,16 @@ class GeminiClient:
             str: Generated content or fallback string.
         """
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=temperature
-                ),
+            text = self._generate_response(
+                prompt,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+                system_instruction=system_instruction,
             )
-            if response.candidates and response.candidates[0].content.parts:
-                text = response.candidates[0].content.parts[0].text.strip()
+            if text:
                 return text
             else:
-                logger.warning("Empty response received from Gemini API.")
+                logger.warning("Empty response received from %s.", self.provider)
                 return on_error
 
         except GoogleAPIError as e:
@@ -170,38 +405,27 @@ class GeminiClient:
             return on_error
 
     # text to JSON
-    def generate_json(self, prompt: str, json_schema: Schema) -> Dict[str, Any]:
+    def generate_json(
+        self, prompt: str, json_schema: Schema | dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Generates a structured JSON object from a prompt based on a provided schema.
 
         Args:
-            prompt: The input prompt for the model.
-            json_schema: The google.generativeai.types.Schema defining the desired JSON output.
+            prompt: Input prompt for the model.
+            json_schema: Google GenAI schema or JSON schema dictionary.
 
         Returns:
             A dictionary parsed from the model's JSON response, or an empty dict on error.
         """
         try:
-            # Configure the model for JSON output mode with the specified schema
-
-            generation_config = GenerationConfig(
-                response_mime_type=JSON_TYPE,
-                response_schema=json_schema
+            response_text = self._generate_response(
+                prompt, json_schema=json_schema
             )
-
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=generation_config,
-            )
-
-            response_text = response.text.strip()
             return json.loads(response_text)
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to decode JSON from model response: {e}")
-            logger.debug(
-                f"Raw model response: {response.text if 'response' in locals() else 'N/A'}")
             return {}
         except GoogleAPIError as e:
             logger.error(f"A Google API error occurred: {e}")
@@ -215,9 +439,9 @@ class GeminiClient:
         self,
         text_prompt: str,
         image_bytes: bytes,
-        json_schema: Schema = None,
+        json_schema: Schema | None = None,
         temperature: float = 0.25,
-        on_error: Dict[str, Any] = None
+        on_error: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """
         Generate structured geolocation JSON using text + image input.
@@ -243,71 +467,47 @@ class GeminiClient:
             logger.debug("Using default GEOLOCATION_SCHEMA.")
 
         try:
-            # 1. Tạo Part cho hình ảnh
-            image_part = types.Part.from_bytes(
-                data=image_bytes,
-                # Cố gắng suy luận MIME type, nhưng giữ mặc định nếu không có thông tin tốt hơn
-                mime_type="image/jpeg"
-            )
-
-            # 2. Cấu hình GenerationConfig cho đầu ra JSON có cấu trúc
-            generation_config = types.GenerateContentConfig(
+            response_text = self._generate_response(
+                text_prompt,
                 temperature=temperature,
-                # Chỉ định đầu ra là JSON
-                response_mime_type=JSON_TYPE,
-                # Chỉ định Schema cho JSON
-                response_schema=json_schema,
+                json_schema=json_schema,
+                image_bytes=image_bytes,
             )
 
-            # 3. Multimodal: text + image
-            # Contents là list chứa các phần: [image_part, text_prompt]
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=[image_part, text_prompt],
-                config=generation_config,
-            )
-
-            # 4. Xử lý phản hồi
-            response_text = response.text.strip()
-
-            # Kiểm tra xem có phản hồi không
             if not response_text:
                 logger.warning(
-                    "Empty response received from Gemini API in JSON mode.")
+                    "Empty JSON response received from %s.", self.provider)
                 return on_error
 
             return json.loads(response_text)
 
         except GoogleAPIError as e:
-            logger.error(f"Google API error in generate_weather_forecast: {e}")
+            logger.error("Google API error in geolocation generation: %s", e)
             return on_error
 
         except json.JSONDecodeError as e:
             logger.error(
                 f"JSON decode failed. Model response was not valid JSON: {e}")
-            logger.debug(
-                f"Raw model response: {response.text if 'response' in locals() else 'N/A'}")
             return on_error
 
-        except Exception as e:
-            logger.exception(
-                f"Unexpected error in generate_weather_forecast: {e}")
+        except Exception:
+            logger.exception("Unexpected error in geolocation generation.")
             return on_error
 
     def generate_weather_info_from_text(
         self,
         raw_weather_text: str,
-        json_schema: Schema = None,
+        json_schema: Schema | None = None,
         temperature: float = 0.2,
         limit_days: int = 0,
-        on_error: Dict[str, Any] = None
+        on_error: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """
         Convert raw Windy.com scraped text into structured JSON weather info.
 
         Args:
             raw_weather_text (str): The extracted innerText from Windy (file.txt).
-            model (GeminiClient): Optional injected Gemini client. Auto-created if None.
+            model (AIClient): Optional injected AI client.
             json_schema (Schema): Output schema for structured weather forecasting.
             temperature (float): Model creativity level.
             on_error (dict): Fallback dictionary.
@@ -333,21 +533,11 @@ class GeminiClient:
         # Prompt for the LLM
         prompt = build_weather_prompt(json_schema, cleaned_text, limit_days)
         try:
-            # Use Gemini JSON mode
-
-            generation_config = types.GenerateContentConfig(
+            text = self._generate_response(
+                prompt,
                 temperature=temperature,
-                response_mime_type=JSON_TYPE,
-                response_schema=json_schema,
+                json_schema=json_schema,
             )
-
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=generation_config,
-            )
-
-            text = response.text.strip()
             if not text:
                 logger.error(
                     "Empty JSON response in generate_weather_info_from_text.")
@@ -358,17 +548,14 @@ class GeminiClient:
 
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode failed from model response: {e}")
-            logger.debug(
-                f"Raw response: {response.text if 'response' in locals() else 'N/A'}")
             return on_error
 
         except GoogleAPIError as e:
             logger.error(f"Google API error: {e}")
             return on_error
 
-        except Exception as e:
-            logger.exception(
-                f"Unexpected error in generate_weather_info_from_text: {e}")
+        except Exception:
+            logger.exception("Unexpected error in generate_weather_info_from_text.")
             return on_error
 
     def get_embedding(self, text: str) -> list[float]:
@@ -380,15 +567,12 @@ class GeminiClient:
         Returns:
             list[float]: embedding of text
         """
-        model = get_embedding_model()
-        embeddings = model.encode(
-            text,
-            batch_size=16,
-            show_progress_bar=False,
-            normalize_embeddings=True,  # ensures cosine similarity compatibility
-            convert_to_numpy=True
-        )
-        return embeddings.tolist()
+        return get_embedding_model().encode(
+            text, normalize_embeddings=True
+        ).tolist()
 
     def generate_report(self, prompt: str, temperature: float = 0.6, on_error: str = '') -> str:
         return generate_pie_chart()
+
+
+GeminiClient = AIClient

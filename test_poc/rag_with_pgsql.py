@@ -1,7 +1,6 @@
 # app.py
 """
-FastAPI RAG service using PostgreSQL 16 + pgvector for retrieval
-and Mistral-7B-Instruct (GGUF via llama.cpp) for generation.
+FastAPI RAG service using PostgreSQL + pgvector and hosted AI APIs.
 
 Added:
 - Multi-tenant RBAC using API keys (viewer/editor/admin)
@@ -21,19 +20,14 @@ from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from sentence_transformers import SentenceTransformer
 import numpy as np
-from llama_cpp import Llama
 from contextlib import asynccontextmanager
+from leoai.ai_core import AIClient, get_embedding_model
 
 # -------------------- Config --------------------
 @dataclass
 class Settings:
-    pg_dsn: str = os.getenv("PG_DSN", "postgresql://rag_user:changeme@localhost:5432/customer360")
-    model_embed: str = os.getenv("MODEL_EMBED", "intfloat/multilingual-e5-base")
-    mistral_path: str = os.getenv("MISTRAL_GGUF", "./mistral-7b-instruct-v0.2.Q6_K.gguf")
-    llama_ctx: int = int(os.getenv("LLAMA_CTX", "4096"))
-    llama_threads: int = int(os.getenv("LLAMA_THREADS", "8"))
+    pg_dsn: str = os.getenv("PGSQL_DB_URL", "postgresql://rag_user:changeme@localhost:5433/leo360")
     chunk_size: int = int(os.getenv("CHUNK_SIZE", "700"))
     chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "120"))
     top_k: int = int(os.getenv("TOP_K", "4"))
@@ -52,23 +46,17 @@ async def lifespan(app: FastAPI):
     )
     await ensure_schema(_pool)
 
-    _embedder = SentenceTransformer(settings.model_embed)
-    _llm = Llama(
-        model_path=settings.mistral_path,
-        n_ctx=settings.llama_ctx,
-        n_threads=settings.llama_threads,
-        logits_all=False,
-        verbose=False,
-    )
+    _embedder = get_embedding_model()
+    _llm = AIClient()
     yield
     # Shutdown
     if _pool:
         await _pool.close()
-    del _llm
-    del _embedder
+    _llm = None
+    _embedder = None
 
 app = FastAPI(
-    title="RAG API (pgvector + e5 + Mistral) with RBAC + SSE",
+    title="RAG API (pgvector + hosted AI) with RBAC + SSE",
     lifespan=lifespan
 )
 
@@ -78,8 +66,8 @@ async def healthz():
 
 # -------------------- Globals --------------------
 _pool: Optional[asyncpg.Pool] = None
-_embedder: Optional[SentenceTransformer] = None
-_llm: Optional[Llama] = None
+_embedder = None
+_llm: Optional[AIClient] = None
 
 # -------------------- Utils --------------------
 def chunk_text(text: str, size: int, overlap: int) -> List[str]:
@@ -98,24 +86,17 @@ def chunk_text(text: str, size: int, overlap: int) -> List[str]:
         start = max(0, end - overlap)
     return chunks
 
-@lru_cache(maxsize=1)
-def get_embedder() -> SentenceTransformer:
+def get_embedder():
     global _embedder
     if _embedder is None:
-        _embedder = SentenceTransformer(settings.model_embed)
+        _embedder = get_embedding_model()
     return _embedder
 
 @lru_cache(maxsize=1)
-def get_llm() -> Llama:
+def get_llm() -> AIClient:
     global _llm
     if _llm is None:
-        _llm = Llama(
-            model_path=settings.mistral_path,
-            n_ctx=settings.llama_ctx,
-            n_threads=settings.llama_threads,
-            logits_all=False,
-            verbose=False,
-        )
+        _llm = AIClient()
     return _llm
 
 async def ensure_schema(pool: asyncpg.Pool):
@@ -281,11 +262,7 @@ def build_prompt(context_chunks: List[Dict[str, Any]], query: str, system_prompt
         tag = f"[{c['doc_id']}#{c['chunk_id']}]"
         ctx_lines.append(f"{tag} {c['content']}")
     ctx = "\n\n".join(ctx_lines) if ctx_lines else "(không có)"
-    prompt = """<s>[INST] <<SYS>>\n{sys}\n<</SYS>>\n\n{usr} [/INST]""".format(
-        sys=system,
-        usr=USER_TEMPLATE.format(context=ctx, query=query),
-    )
-    return prompt
+    return f"{system}\n\n" + USER_TEMPLATE.format(context=ctx, query=query)
 
 @app.post("/ask")
 async def ask(payload: AskRequest, key_info: Dict[str, Any] = Depends(get_api_key_info)):
@@ -294,15 +271,11 @@ async def ask(payload: AskRequest, key_info: Dict[str, Any] = Depends(get_api_ke
     context_chunks = sr["results"]
     prompt = build_prompt(context_chunks, payload.query, payload.system_prompt)
 
-    llm = get_llm()
-    out = llm(
+    text = get_llm().generate_content(
         prompt,
-        max_tokens=payload.max_tokens or settings.max_output_tokens,
+        max_output_tokens=payload.max_tokens or settings.max_output_tokens,
         temperature=0.2,
-        top_p=0.95,
-        repeat_penalty=1.1,
     )
-    text = out["choices"][0]["text"].strip()
     return {"answer": text, "context": context_chunks}
 
 # -------------------- SSE streaming /ask/stream --------------------
@@ -337,11 +310,12 @@ async def ask_stream(tenant_id: str, query: str, x_api_key: Optional[str] = Head
     ]
 
     prompt = build_prompt(context_chunks, query, None)
-    llm = get_llm()
-
     # generate full text (replace with streaming tokens if available)
-    out = llm(prompt, max_tokens=settings.max_output_tokens, temperature=0.2)
-    text = out["choices"][0]["text"].strip()
+    text = get_llm().generate_content(
+        prompt,
+        max_output_tokens=settings.max_output_tokens,
+        temperature=0.2,
+    )
     pieces = await _sentence_splitter(text)
 
     async def event_generator() -> AsyncGenerator[bytes, None]:

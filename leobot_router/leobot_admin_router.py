@@ -194,7 +194,7 @@ if keycloak_openid:
             "description": description,
             "timestamp": int(time.time()),
         }
-        return templates.TemplateResponse("admin/sso_error.html", context, status_code=400)
+        return templates.TemplateResponse(request, "admin/sso_error.html", context, status_code=400)
     
     @router.get("/_leoai/sso/login")
     async def login():
@@ -305,7 +305,7 @@ if keycloak_openid:
             # Pass the session ID to the template so it can be used for API calls
             "session_id": session_id 
         }
-        return templates.TemplateResponse("admin/dashboard.html", context)
+        return templates.TemplateResponse(request, "admin/dashboard.html", context)
 
     @router.get("/_leoai/sso/me", response_class=JSONResponse)
     async def get_me(sid: str = None, authorization: str = Header(None)):
@@ -362,6 +362,7 @@ else:
     @router.get("/admin", response_class=HTMLResponse)
     async def admin_panel_disabled(request: Request):
         return templates.TemplateResponse(
+            request,
             "admin/error.html",
             {"request": request, "error_message": "Keycloak not enabled or failed to initialize."},
             status_code=503,

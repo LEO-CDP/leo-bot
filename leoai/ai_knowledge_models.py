@@ -7,8 +7,6 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 
-from leoai.ai_core import get_tokenizer
-
 # ---------------------------------------------------------------------
 # Enum Models
 # ---------------------------------------------------------------------
@@ -89,10 +87,9 @@ class KnowledgeChunk(BaseModel):
 DEFAULT_MAX_TOKENS = 200 
 DEFAULT_OVERLAP_TOKENS = 40
 
-tokenizer = get_tokenizer()
-
 def token_count(text: str) -> int:
-    return len(tokenizer.encode(text, add_special_tokens=False))
+    """Return a lightweight whitespace-token estimate for text chunk sizing."""
+    return len(text.split())
 
 
 def smart_split(text: str, source_type: KnowledgeSourceType) -> List[str]:
@@ -173,12 +170,12 @@ def tokenized_chunk_text(
             if current:
                 chunks.append(current)
             # Split oversized section into token windows
-            tokens = tokenizer.encode(sec, add_special_tokens=False)
+            tokens = sec.split()
             while len(tokens) > max_tokens:
                 part_tokens = tokens[:max_tokens]
-                chunks.append(tokenizer.decode(part_tokens))
+                chunks.append(" ".join(part_tokens))
                 tokens = tokens[max_tokens - overlap_tokens :]
-            current = tokenizer.decode(tokens)
+            current = " ".join(tokens)
             current_tokens = token_count(current)
 
     if current:

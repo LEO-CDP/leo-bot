@@ -35,9 +35,10 @@ async def fb_webhook_handler(request: Request):
         body = await request.json()
         for entry in body.get("entry", []):
             for event in entry.get("messaging", []):
-                sender_id = event["sender"]["id"]
+                sender = event.get("sender", {})
+                sender_id = sender.get("id")
                 user_msg = event.get("message", {}).get("text")
-                if not user_msg:
+                if not sender_id or not user_msg:
                     continue
                 logger.info(f"FB user '{sender_id}' said: {user_msg}")
 
@@ -48,14 +49,14 @@ async def fb_webhook_handler(request: Request):
                     cdp_profile_id="",
                     touchpoint_id="facebook",
                 )
-                send_message_to_facebook(sender_id, ai_reply)
+                await send_message_to_facebook(sender_id, ai_reply)
     except Exception as e:
         logger.exception("Error in FB webhook handler")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": "Webhook processing failed"})
     return {"ok": True}
 
 
-def send_message_to_facebook(recipient_id: str, message_text: str):
+async def send_message_to_facebook(recipient_id: str, message_text: str):
     """
     Sends a text message reply to a Facebook Messenger user.
     """
@@ -63,8 +64,9 @@ def send_message_to_facebook(recipient_id: str, message_text: str):
     payload = {"recipient": {"id": recipient_id}, "message": {"text": message_text}}
 
     try:
-        with httpx.Client(timeout=10) as client:
-            client.post(url, json=payload).raise_for_status()
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
             logger.info(f"✅ Sent message to FB user {recipient_id}")
-    except Exception as e:
-        logger.error(f"❌ Failed to send message to FB user {recipient_id}: {e}")
+    except httpx.HTTPError:
+        logger.exception("❌ Failed to send message to FB user %s", recipient_id)

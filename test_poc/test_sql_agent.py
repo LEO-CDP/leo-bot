@@ -1,18 +1,8 @@
-from llama_cpp import Llama
 import sqlite3
+from _bootstrap import PROJECT_ROOT
+from leoai.ai_core import AIClient
 
-# === STEP 0: download mistral-7b-instruct-v0.2.Q6_K.gguf 
-# at the https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/tree/main
-
-# === STEP 1: Load model ===
-print("Loading Mistral model...")
-llm = Llama(
-    model_path="models/mistral-7b-instruct-v0.2.Q6_K.gguf",  # Local GGUF model
-    n_ctx=4096,
-    n_threads=16,  # Adjust to your CPU
-    n_batch=512,
-    verbose=False
-)
+llm = AIClient()
 
 # === STEP 2: Setup test SQLite DB ===
 conn = sqlite3.connect(":memory:")  # in-memory DB for testing
@@ -44,15 +34,8 @@ def generate_sql(user_request: str) -> str:
         "You are a helpful assistant that converts natural language questions into SQL queries. "
         "Only output SQL without explanations. The database is SQLite and follows standard SQL."
     )
-    prompt = f"[INST] {system_prompt}\nUser request: {user_request} [/INST]"
-
-    output = llm(
-        prompt,
-        max_tokens=256,
-        temperature=0,
-        stop=["[/INST]", "</s>"]
-    )
-    return output["choices"][0]["text"].strip()
+    prompt = f"{system_prompt}\nUser request: {user_request}\nSQL:"
+    return llm.generate_content(prompt, temperature=0)
 
 # === STEP 4: Agent loop ===
 while True:

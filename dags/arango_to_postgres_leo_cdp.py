@@ -25,9 +25,7 @@ from airflow.exceptions import AirflowException # Import for raising errors
 
 # external libs
 import psycopg  # psycopg3
-from functools import lru_cache
-import torch
-from sentence_transformers import SentenceTransformer
+from leoai.ai_core import get_embedding_model
 
 # ---------------------------
 # CONFIG
@@ -46,9 +44,6 @@ PG_CONN_ID = 'leo_bot_pgsql'
 
 # 
 EMBED_BATCH_SIZE = int(Variable.get("embed_batch_size", default_var=64))
-PROFILE_EMBED_DIM = int(Variable.get("profile_embed_dim", default_var=768))
-TXN_EMBED_DIM = int(Variable.get("txn_embed_dim", default_var=768))
-DEFAULT_EMBEDDING_MODEL_ID = Variable.get("embed_model_id", default_var="intfloat/multilingual-e5-base")
 ARANGO_PROFILE_COL = Variable.get("arango_profile_collection", default_var="cdp_profile")
 ARANGO_TXN_COL = Variable.get("arango_txn_collection", default_var="cdp_profile2conversion")
 
@@ -60,39 +55,18 @@ DATA_SOURCE_TAG = 'arango_ingest' # For updated_by columns
 log = logging.getLogger("airflow.task")
 logging.basicConfig(level=logging.INFO)
 
-device = "cpu"
-
-# --- Placeholder embedding loader (use your real provider) ---
-
-    
-@lru_cache(maxsize=1)
-def get_embedding_model():
-    """Lazy-Loading SentenceTransformer model once."""
-    log.info(f"Loading SentenceTransformer model '{DEFAULT_EMBEDDING_MODEL_ID}' on device: {device}...")
-    embedding_model = SentenceTransformer(DEFAULT_EMBEDDING_MODEL_ID, device=device)
-    return embedding_model
-
-
 def get_embeddings_batch(texts: List[str]) -> List[List[float]]:
     """
-    Real embedding call using SentenceTransformer.
+    Create normalized embeddings using the configured hosted API provider.
     Returns list of vectors (length == dim) for each text.
     """
     if not texts:
         return []
 
-    embedding_model = get_embedding_model()  # load once via lru_cache
-    if embedding_model is None:
-        log.error("Embedding model '%s' could not be loaded. Returning empty embeddings.", DEFAULT_EMBEDDING_MODEL_ID)
-        # Return list of None to match expected length
-        return [None] * len(texts)
-        
-    embeddings = embedding_model.encode(
-        texts,  # encode the full batch
+    embeddings = get_embedding_model().encode(
+        texts,
         batch_size=16,
-        show_progress_bar=False,
-        normalize_embeddings=True,  # cosine similarity ready
-        convert_to_numpy=True
+        normalize_embeddings=True,
     )
     return embeddings.tolist()
 

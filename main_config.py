@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from redis import Redis
 from fastapi import Depends, FastAPI, HTTPException
-from leoai.ai_core import get_embedding_model
 import logging
 import structlog
 
@@ -41,7 +40,8 @@ RATE_LIMIT_WINDOW_SECONDS = 60  # time window
 # --- Redis ---
 REDIS_HOST = os.getenv("REDIS_USER_SESSION_HOST") or "localhost"
 REDIS_PORT = int(os.getenv("REDIS_USER_SESSION_PORT") or 6379)
-REDIS_CLIENT = Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+REDIS_USER_SESSION_DB = int(os.getenv("REDIS_USER_SESSION_DB") or 0)
+REDIS_CLIENT = Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_USER_SESSION_DB, decode_responses=True)
 
 # --- Facebook Integration ---
 BASE_URL_FB_MSG = 'https://graph.facebook.com/v13.0/me/messages'
@@ -67,9 +67,6 @@ async def leobot_lifespan(app: FastAPI):
     logger.info("🔄 Initializing LEO BOT and loading configs ...")
     logger.info(f" HOSTNAME: {HOSTNAME}")
     logger.info(f" LEOBOT_DEV_MODE: {LEOBOT_DEV_MODE}")
-    
-    # start some base services for caching
-    get_embedding_model()
     
     # App runs here
     yield  

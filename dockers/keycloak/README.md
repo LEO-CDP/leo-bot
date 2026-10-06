@@ -72,6 +72,11 @@ KC_PROXY_HEADERS=xforwarded
 
 These variables control the container startup and Keycloak’s hostname behavior.
 
+Keycloak uses the shared PostgreSQL 18 container on the `leo-vlan` Docker
+network. Its database is `keycloak` inside that PostgreSQL container; port
+5432 is the internal PostgreSQL port and is separate from LEO BOT's host port
+5433.
+
 ---
 
 ### 3. Make the script executable
@@ -176,7 +181,7 @@ sudo update-ca-certificates
 | Start Keycloak             | `./run-keycloak.sh`         |
 | Reset & delete all data    | `./run-keycloak.sh --reset` |
 | View live logs             | `docker logs -f keycloak`   |
-| Stop Keycloak              | `docker stop keycloak`      |
+| Stop Keycloak              | `./stop_keycloak.sh`        |
 | Restart container manually | `docker restart keycloak`   |
 | List Docker volumes        | `docker volume ls`          |
 
@@ -200,4 +205,3 @@ sudo update-ca-certificates
 | Persistent | Data stored in `keycloak_data` volume |
 
 Keycloak will be available at: **`https://leoid.example.com`**
-

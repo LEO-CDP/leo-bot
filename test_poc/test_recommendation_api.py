@@ -1,202 +1,144 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-from typing import List, Dict, Any
+"""FastAPI adapter for the recommendation service."""
 
-import asyncio
-from async_pgvector_recommend import (
-    create_pool,
-    ensure_extension_and_tables,
-    create_hnsw_index_for_products,
-    upsert_profile,
-    upsert_product,
-    batch_upsert_profiles,
-    batch_upsert_products,
-    recommend_products_for_profile,
+from contextlib import asynccontextmanager
+import logging
+from typing import Any
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+if __package__:
+    from .test_recommendation import (
+        Product, Profile, RecommendationInputError, RecommendationService,
+    )
+else:
+    from test_recommendation import (
+        Product, Profile, RecommendationInputError, RecommendationService,
+    )
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with RecommendationService.connect() as service:
+        app.state.recommendations = service
+        yield
+
+
+app = FastAPI(
+    title="CDP Recommendation API (PGVector)", version="2.0", lifespan=lifespan
 )
 
-# -----------------------------------
-# FastAPI initialization
-# -----------------------------------
-app = FastAPI(title="CDP Recommendation API (PGVector)", version="2.0")
 
-# Connection pool reference
-pool = None
-
-
-# -----------------------------------
-# Pydantic models for input validation
-# -----------------------------------
 class ProfileRequest(BaseModel):
-    profile_id: str
-    page_view_keywords: List[str]
-    purchase_keywords: List[str]
-    interest_keywords: List[str]
-    additional_info: Dict[str, Any] = {}
-    max_recommendation_size: int = Field(8, description="Default top N recommendations")
-    except_product_ids: List[str] = []
+    profile_id: str = Field(min_length=1)
+    page_view_keywords: list[str] = Field(min_length=1)
+    purchase_keywords: list[str] = Field(min_length=1)
+    interest_keywords: list[str] = Field(min_length=1)
+    additional_info: dict[str, Any] = Field(default_factory=dict)
+    max_recommendation_size: int = Field(8, gt=0)
+    except_product_ids: list[str] = Field(default_factory=list)
+
+    def to_profile(self) -> Profile:
+        return Profile(
+            self.profile_id, self.page_view_keywords, self.purchase_keywords,
+            self.interest_keywords, self.additional_info,
+        )
 
 
 class ProductRequest(BaseModel):
-    product_id: str
+    product_id: str = Field(min_length=1)
     product_name: str
     product_category: str
-    product_keywords: List[str]
-    additional_info: Dict[str, Any] = {}
+    product_keywords: list[str]
+    additional_info: dict[str, Any] = Field(default_factory=dict)
+
+    def to_product(self) -> Product:
+        return Product(
+            self.product_id, self.product_name, self.product_category,
+            self.product_keywords, self.additional_info,
+        )
 
 
-# -----------------------------------
-# Lifecycle events
-# -----------------------------------
-@app.on_event("startup")
-async def on_startup():
-    global pool
-    pool = await create_pool()
-    await ensure_extension_and_tables(pool)
-    await create_hnsw_index_for_products(pool)
-    print("✅ Database initialized and connection pool ready.")
+def get_service(request: Request) -> RecommendationService:
+    return request.app.state.recommendations
 
 
-@app.on_event("shutdown")
-async def on_shutdown():
-    global pool
-    if pool:
-        await pool.close()
-        print("🛑 Connection pool closed.")
+@app.exception_handler(RecommendationInputError)
+async def invalid_input(request: Request, exc: RecommendationInputError):
+    logger.warning("Invalid recommendation request at %s: %s", request.url.path, exc)
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
-# -----------------------------------
-# Default route
-# -----------------------------------
 @app.get("/")
 async def index():
     return {"message": "CDP Recommendation API using PostgreSQL + pgvector"}
 
 
-# -----------------------------------
-# Profile Endpoints
-# -----------------------------------
 @app.post("/add-profile/")
-async def api_add_profile(profile: ProfileRequest):
-    try:
-        await upsert_profile(
-            pool,
-            profile.profile_id,
-            profile.page_view_keywords,
-            profile.purchase_keywords,
-            profile.interest_keywords,
-            profile.additional_info,
-        )
-        return {"status": "Profile added successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Add profile failed: {e}")
+async def api_add_profile(
+    profile: ProfileRequest, service: RecommendationService = Depends(get_service)
+):
+    await service.upsert_profile(profile.to_profile())
+    return {"status": "Profile added successfully"}
 
 
 @app.post("/add-profiles/")
-async def api_add_profiles(profiles: List[ProfileRequest]):
-    try:
-        inserted = await batch_upsert_profiles(
-            pool,
-            [
-                {
-                    "profile_id": p.profile_id,
-                    "page_view_keywords": p.page_view_keywords,
-                    "purchase_keywords": p.purchase_keywords,
-                    "interest_keywords": p.interest_keywords,
-                    "additional_info": p.additional_info,
-                }
-                for p in profiles
-            ],
-        )
-        return {"status": f"{inserted} profiles added/updated successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Batch profile upsert failed: {e}")
+async def api_add_profiles(
+    profiles: list[ProfileRequest], service: RecommendationService = Depends(get_service)
+):
+    inserted = await service.upsert_profiles([profile.to_profile() for profile in profiles])
+    return {"status": f"{inserted} profiles added/updated successfully"}
 
 
-# -----------------------------------
-# Product Endpoints
-# -----------------------------------
 @app.post("/add-product/")
-async def api_add_product(product: ProductRequest):
-    try:
-        await upsert_product(
-            pool,
-            product.product_id,
-            product.product_name,
-            product.product_category,
-            product.product_keywords,
-            product.additional_info,
-        )
-        return {"status": "Product added successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Add product failed: {e}")
+async def api_add_product(
+    product: ProductRequest, service: RecommendationService = Depends(get_service)
+):
+    await service.upsert_product(product.to_product())
+    return {"status": "Product added successfully"}
 
 
 @app.post("/add-products/")
-async def api_add_products(products: List[ProductRequest]):
-    try:
-        inserted = await batch_upsert_products(
-            pool,
-            [
-                {
-                    "product_id": p.product_id,
-                    "name": p.product_name,
-                    "category": p.product_category,
-                    "keywords": p.product_keywords,
-                    "additional_info": p.additional_info,
-                }
-                for p in products
-            ],
-        )
-        return {"status": f"{inserted} products added/updated successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Batch product upsert failed: {e}")
+async def api_add_products(
+    products: list[ProductRequest], service: RecommendationService = Depends(get_service)
+):
+    inserted = await service.upsert_products([product.to_product() for product in products])
+    return {"status": f"{inserted} products added/updated successfully"}
 
 
-# -----------------------------------
-# Recommendation Endpoint
-# -----------------------------------
 @app.post("/recommend/")
-async def api_recommend(profile: ProfileRequest):
-    """
-    Add/update profile, then get recommendations in real-time.
-    """
-    try:
-        await upsert_profile(
-            pool,
-            profile.profile_id,
-            profile.page_view_keywords,
-            profile.purchase_keywords,
-            profile.interest_keywords,
-            profile.additional_info,
-        )
-        result = await recommend_products_for_profile(
-            pool,
-            profile.profile_id,
-            profile.max_recommendation_size,
-            profile.except_product_ids,
-        )
-        if not result or not result.get("recommended_products"):
-            raise HTTPException(status_code=404, detail="No recommendations found")
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Recommendation failed: {e}")
+async def api_recommend(
+    profile: ProfileRequest, service: RecommendationService = Depends(get_service)
+):
+    await service.upsert_profile(profile.to_profile())
+    result = await service.recommend(
+        profile.profile_id, profile.max_recommendation_size, profile.except_product_ids
+    )
+    if not result["recommended_products"]:
+        raise HTTPException(status_code=404, detail="No recommendations found")
+    return result
 
 
 @app.get("/recommend/{profile_id}")
-async def api_get_recommend(profile_id: str, top_n: int = 8, except_product_ids: str = ""):
-    try:
-        ids = [x for x in except_product_ids.split(",") if x]
-        result = await recommend_products_for_profile(pool, profile_id, top_n, ids)
-        if not result or not result.get("recommended_products"):
-            raise HTTPException(status_code=404, detail="No recommendations found")
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Recommendation failed: {e}")
+async def api_get_recommend(
+    profile_id: str,
+    top_n: int = Query(8, gt=0),
+    except_product_ids: str = "",
+    service: RecommendationService = Depends(get_service),
+):
+    ids = [identifier for identifier in except_product_ids.split(",") if identifier]
+    result = await service.recommend(profile_id, top_n, ids)
+    if not result["recommended_products"]:
+        raise HTTPException(status_code=404, detail="No recommendations found")
+    return result
 
 
-# -----------------------------------
-# Run app manually (dev mode)
-# -----------------------------------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app_pgvector_recommend:app", host="0.0.0.0", port=8000, reload=True)
+
+    uvicorn.run(
+        "test_poc.test_recommendation_api:app", host="0.0.0.0", port=8000, reload=True
+    )

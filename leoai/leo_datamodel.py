@@ -20,7 +20,27 @@ class Message(BaseModel):
     temperature_score: float = Field(DEFAULT_TEMPERATURE_SCORE, description="the temperature score of LLM ")
     visitor_id: str = Field("", description="the visitor id ")
     persona_id: str = Field("web_user", description="the persona id ")
-    touchpoint_id: str = Field("web_leobot", description="the touchpoint id ")
+    touchpoint_id: Optional[str] = Field(None, description="the touchpoint id ")
+    latitude: Optional[float] = Field(None, ge=-90, le=90)
+    longitude: Optional[float] = Field(None, ge=-180, le=180)
+    touchpoint_name: str = Field("Web visitor")
+    touchpoint_description: str = Field("")
+    touchpoint_type: str = Field("web", max_length=50)
+    touchpoint_keywords: List[str] = Field(default_factory=list)
+    result_limit: Optional[int] = Field(
+        None, gt=0, strict=True, description="Nearby result count; overrides a count in the question."
+    )
+
+
+class GeolocationTouchpointRequest(BaseModel):
+    visitor_id: str = Field(..., min_length=1, max_length=255)
+    touchpoint_id: Optional[str] = Field(None, max_length=64)
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
+    name: str = Field("Web visitor")
+    description: str = Field("")
+    type: str = Field("web", max_length=50)
+    keywords: List[str] = Field(default_factory=list)
 
     
 # Data models

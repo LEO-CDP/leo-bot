@@ -79,42 +79,43 @@ END $$;
 
 
 -- Defines the type of knowledge source (e.g., book, report, dataset, etc.)
-CREATE TYPE knowledge_source_type AS ENUM (
-    -- Textual & Document Sources
-    'book_summary',               -- extracted or summarized from books
-    'report_analytics',           -- business or market reports
-    'uploaded_document',          -- user-uploaded PDFs, Word docs, etc.
-    'web_page',                   -- scraped website content
-    'research_paper',             -- scientific or academic publication
-    'knowledge_base_article',     -- internal or external wiki, FAQ, SOP
-
-    -- Data & Technical Sources
-    'dataset',                    -- structured tabular data (CSV, JSON, SQL)
-    'code_repository',            -- source code or API docs
-    'api_documentation',          -- REST/GraphQL API reference or schema
-    'system_log',                 -- application or infrastructure logs
-
-    -- Conversational & Social Sources
-    'conversation_log',           -- chatbot or customer support transcripts
-    'meeting_transcript',         -- AI-generated meeting notes or Zoom calls
-    'social_media_post',          -- tweets, LinkedIn posts, or public threads
-
-    -- Media & Multimodal Sources
-    'video_transcript',           -- text extracted from video
-    'audio_transcript',           -- text extracted from podcast or call
-    'other'                       -- fallback for anything unclassified
-);
-
-
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'knowledge_source_type') THEN
+        CREATE TYPE knowledge_source_type AS ENUM (
+            'book_summary',
+            'report_analytics',
+            'uploaded_document',
+            'web_page',
+            'research_paper',
+            'knowledge_base_article',
+            'dataset',
+            'code_repository',
+            'api_documentation',
+            'system_log',
+            'conversation_log',
+            'meeting_transcript',
+            'social_media_post',
+            'video_transcript',
+            'audio_transcript',
+            'other'
+        );
+    END IF;
+END$$;
 
 -- Tracks the state of the document in the processing pipeline
-CREATE TYPE processing_status AS ENUM (
-    'pending',      -- Waiting to be processed
-    'processing',   -- Actively being chunked and embedded
-    'active',       -- Ready for querying
-    'failed',       -- An error occurred during processing
-    'archived'      -- No longer in active use
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'processing_status') THEN
+        CREATE TYPE processing_status AS ENUM (
+            'pending',
+            'processing',
+            'active',
+            'failed',
+            'archived'
+        );
+    END IF;
+END$$;
 
 -- ============================================================
 -- Knowledge Sources
@@ -186,8 +187,53 @@ CREATE TABLE IF NOT EXISTS places (
 );
 
 CREATE INDEX IF NOT EXISTS idx_places_geom ON places USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_places_geog ON places USING GIST ((geom::geography));
 CREATE INDEX IF NOT EXISTS idx_places_pluscode ON places (pluscode);
 CREATE INDEX IF NOT EXISTS idx_places_region ON places (region_id);
+
+-- ============================================================
+-- Geolocation touchpoints
+-- ============================================================
+CREATE TABLE IF NOT EXISTS touchpoints (
+    touchpoint_id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    tenant_id VARCHAR(50) NOT NULL DEFAULT 'default',
+    latitude DECIMAL(9, 6) NOT NULL CHECK (latitude BETWEEN -90 AND 90),
+    longitude DECIMAL(9, 6) NOT NULL CHECK (longitude BETWEEN -180 AND 180),
+    geom GEOMETRY(Point, 4326) NOT NULL,
+    name TEXT,
+    description TEXT,
+    type VARCHAR(50),
+    keywords TEXT[],
+    embedding VECTOR(768),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+DROP INDEX IF EXISTS idx_touchpoints_embedding;
+DO $$
+DECLARE
+    embedding_type TEXT;
+BEGIN
+    SELECT format_type(a.atttypid, a.atttypmod)
+    INTO embedding_type
+    FROM pg_attribute AS a
+    JOIN pg_class AS c ON c.oid = a.attrelid
+    WHERE c.relname = 'touchpoints'
+      AND a.attname = 'embedding'
+      AND NOT a.attisdropped;
+END$$;
+
+CREATE INDEX IF NOT EXISTS idx_touchpoints_geom ON touchpoints USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_touchpoints_geog
+    ON touchpoints USING GIST ((geom::geography));
+CREATE INDEX IF NOT EXISTS idx_touchpoints_user ON touchpoints (user_id, tenant_id);
+CREATE INDEX IF NOT EXISTS idx_touchpoints_embedding
+    ON touchpoints USING hnsw (embedding vector_cosine_ops)
+    WHERE embedding IS NOT NULL;
 
 
 -- ============================================================

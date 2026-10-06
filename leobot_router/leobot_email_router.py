@@ -53,7 +53,7 @@ async def email_agent(request: Request, user: str = Depends(get_current_user)):
         logger.info(f"✅ Email successfully sent to {to_email}")
         return {"ok": True, "message": "Email sent successfully"}
 
-    except Exception as e:
-        # Log and return standardized error
+    except Exception:
+        # Log details server-side without exposing implementation or SMTP errors.
         logger.exception("Email agent error")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": "Email processing failed"})

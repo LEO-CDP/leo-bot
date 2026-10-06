@@ -3,16 +3,16 @@ import json
 import cityhash
 import asyncpg
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from _bootstrap import PROJECT_ROOT
+from leoai.ai_core import get_embedding_model
 
 # -----------------------------
 # Config
 # -----------------------------
 DB_DSN = "postgresql://username:password@localhost:5432/yourdb"  # Change this
 
-MODEL_NAME = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
-model = SentenceTransformer(MODEL_NAME)
-VECTOR_DIM_SIZE = model.get_sentence_embedding_dimension()
+model = get_embedding_model()
+VECTOR_DIM_SIZE = model.dimensions
 
 TABLE_NAME = "cities_data"
 

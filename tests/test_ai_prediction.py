@@ -141,7 +141,7 @@ def extract_weather_info_from_text(input_file_path: str, limit_days: int, client
     """
 
     if client is None:
-        client = GeminiClient(model_name="gemini-2.5-flash-lite")
+        client = GeminiClient(model_name="gemini-3.5-flash-lite")
 
     raw_text = read_file_to_text(input_file_path)
 

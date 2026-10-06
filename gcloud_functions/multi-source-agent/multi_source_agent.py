@@ -15,7 +15,7 @@ class AppConfig:
     """Quản lý các hằng số cấu hình của ứng dụng."""
     
     # Model sử dụng
-    LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "gemini-2.5-flash-lite")
+    LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "gemini-3.5-flash-lite")
 
     # Persona of Agent
     AGENT_PERSONA = os.getenv("AGENT_PERSONA", "You are a Document Analyst")
@@ -58,17 +58,17 @@ class AppConfig:
 
 def get_gemini_client():
     """Lấy API Key từ biến môi trường (hoặc Colab userdata) và khởi tạo Client."""
-    api_key = os.environ.get("GOOGLE_GEMINI_API_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY")
 
     if not api_key:
         try:
             from google.colab import userdata
-            api_key = userdata.get("GOOGLE_GEMINI_API_KEY")
+            api_key = userdata.get("GEMINI_API_KEY")
         except ImportError:
             pass
 
     if not api_key:
-        raise ValueError("GOOGLE_GEMINI_API_KEY environment variable is not set.")
+        raise ValueError("GEMINI_API_KEY environment variable is not set.")
     
     return genai.Client(api_key=api_key)
 

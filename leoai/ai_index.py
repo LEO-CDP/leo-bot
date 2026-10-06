@@ -1,4 +1,3 @@
-import os
 import json
 import logging
 from typing import Dict, Any, List
@@ -11,11 +10,7 @@ from leoai.db_utils import get_pg_conn
 
 logger = logging.getLogger("ai_index")
 
-DATABASE_URL = os.getenv( "POSTGRES_URL", "postgresql://postgres:password@localhost:5432/customer360")
-
-DEFAULT_MODEL_ID = os.getenv("GEMINI_TEXT_MODEL_ID", "gemini-2.0-flash-001")
-EMBEDDING_MODEL_ID = os.getenv("GEMINI_EMBED_MODEL_ID", "text-embedding-004")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+DATABASE_URL = os.getenv( "PGSQL_DB_URL", "postgresql://postgres:password@localhost:5433/leo360")
 
 embedding_model = get_embedding_model()
 
@@ -95,5 +90,3 @@ class ContentIndex:
 
                 results = cur.fetchall()
                 return results
-
-

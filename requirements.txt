@@ -1,70 +1,42 @@
-# === Web Framework ===
+# Web application
 fastapi
 uvicorn[standard]
-
-# === Markdown, HTTP & Templates ===
-markdown
-httpx                     # modern async HTTP client
+httpx
 jinja2
-cityhash
-
-# === Environment Variables ===
+markdown
 python-dotenv
 
-# === Email ===
+# Email and integrations
 aiosmtplib
+fastapi-keycloak
+urllib3
 
-# === Google Cloud AI & Translation ===
-google-cloud-translate
+# Hosted AI providers and translation
+google-genai
 google-api-core
-google-genai              # Gemini SDK (already depends on google-api-core)
+google-cloud-translate
+openai
+fastembed
 
-# === Transformers & Local AI Models ===
-transformers
-torch                     # backend for transformers
-sentence-transformers      # depends on transformers, but needed separately
-huggingface_hub
-llama-cpp-python           # for local GGUF models (Phi-3, etc.)
-
-# === LangChain Ecosystem ===
-langchain
-
-# === Data Validation ===
-pydantic                   # used by FastAPI; pin version only if FastAPI compatibility requires it
-
-# === Databases ===
-psycopg[binary]             # PostgreSQL driver
-asyncpg                     # async PostgreSQL
-sqlalchemy                  # ORM
-python-arango               # ArangoDB driver
-redis                       # caching and stream data
-
-# === Vector Search ===
-pgvector
-
-# === Airflow ETL ===
-apache-airflow==2.11.0
-apache-airflow-providers-postgres
-apache-airflow-providers-arangodb
-
-# === Data & ML ===
+# Data models, storage, and databases
+boto3>=1.43.0,<2
+pydantic
+psycopg[binary]
+asyncpg
+python-arango
+redis
 numpy
-pandas
-scikit-learn
 
-# === Visualization & Metrics ===
-matplotlib
-plotly                       # for JSON-serializable chart data
-orjson                       # fast JSON serialization
-pandas-stubs                 # type hints for Pandas in dev
-
-# === Security & Auth ===
-fastapi-keycloak             # for OpenID Connect (Keycloak integration)
-python-jose[cryptography]    # JWT handling for auth tokens
-
-# === Performance Monitoring ===
-prometheus-fastapi-instrumentator
-
-# Retry + exponential backoff, Logging JSON
-tenacity 
+# Reporting and resilience
+plotly
+tenacity
 structlog
+
+# GraphQL and Dagster
+dagster-webserver>=1.13.25,<2
+dagster-graphql>=1.13.25,<2
+dagster>=1.13.25,<2
+
+# Testing
+pytest>=7.4,<9
+pytest-asyncio>=0.21,<1

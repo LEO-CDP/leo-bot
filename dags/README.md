@@ -56,10 +56,8 @@ The DAG flow is as follows:
 - `arango_profile_collection`: Profile collection name (default: `cdp_profile`)  
 - `arango_txn_collection`: Transaction/edge collection name (default: `cdp_profile2conversion`)  
 - `embed_batch_size`: Number of texts sent to the embedding model in a single batch (default: 64)  
-- `profile_embed_dim`: Vector dimension size for profile embeddings (default: 768)  
-- `txn_embed_dim`: Vector dimension size for transaction embeddings (default: 768)  
-- `embedding_provider`: Identifier string for the embedding model (e.g., `"openai"`, `"vertex"`, `"placeholder"`)  
-- `embed_model_id`: Hugging Face model ID for the local SentenceTransformer (default: `intfloat/multilingual-e5-base`)  
+- `embedding_provider`: Hosted embedding provider (`"google"`, `"openai"`, or `"openrouter"`)
+- `embed_model_id`: Provider-specific hosted embedding model ID
 
 ### DAG Parameters
 - **`segment_id` (string):** ID of the LEO CDP segment to process.  
