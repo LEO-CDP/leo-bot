@@ -50,6 +50,10 @@
     <!-- lscache JS  -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lscache/1.3.2/lscache.min.js" integrity="sha512-ved46eQuz4zEGcBm1JdsWqYsndqlY1jAtUXCrkTe+l88a7Sj0BhstPajJntxq3HwRDPa9qwaqRUVN7Jr8NwhMA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
+    {% if GOOGLE_CLIENT_ID %}
+    <!-- Google Identity Services powers the optional One Tap prompt. -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    {% endif %}
    
 </head>
 <body>
@@ -70,6 +74,8 @@
                     <option value="vi">Tiếng Việt</option>
                     <option value="en">English</option>
                 </select>
+                <span id="leobot_google_signin_status" class="small text-secondary d-none d-md-inline-flex"
+                    role="status" aria-live="polite"></span>
                 <button id="leobot_help_button" class="btn btn-sm btn-outline-secondary rounded-circle leobot-help-button"
                     type="button" data-bs-toggle="modal" data-bs-target="#leobot_help_modal"
                     aria-label="Trợ giúp" title="Trợ giúp">
@@ -257,6 +263,8 @@
         const BASE_URL_LEOBOT = ORIGIN + '/_leoai/ask';
         const BASE_URL_GET_VISITOR_INFO = ORIGIN + '/_leoai/visitor-info';
         const BASE_URL_TOUCHPOINT = ORIGIN + '/_leoai/touchpoint/geolocation';
+        const BASE_URL_GOOGLE_ONE_TAP = ORIGIN + '/_leoai/auth/google/one-tap';
+        const GOOGLE_ONE_TAP_CLIENT_ID = {{ GOOGLE_CLIENT_ID|tojson }};
         const CDP_TRACKING = "{{ CDP_TRACKING }}" === 'True' ;
         var savedLeoLanguage = "";
         try {

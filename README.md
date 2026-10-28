@@ -159,14 +159,44 @@ cp .env.example.txt .env
 ```
 
 The [`.env.example.txt`](.env.example.txt) file is the canonical full
-configuration. The AI section below matches its Google defaults; configure
-model IDs and credentials together when selecting a different provider.
+configuration. The grouped settings below cover the most important runtime
+options; keep the template open for Dagster, database, channel, and other
+integration-specific settings.
+
+#### General application settings
 
 ```bash
-# Core LEO BOT
 LEOBOT_DEV_MODE=true
+CDP_TRACKING=false
 HOSTNAME=leobot.example.com
+LOG_LEVEL=INFO
 LEO_DATA_ENRICHMENT_KEY=
+```
+
+`LEO_DATA_ENRICHMENT_KEY` protects the authenticated knowledge-ingestion
+endpoint. Generate a long random value and keep it out of source control.
+
+#### Google Login (Web One Tap)
+
+```bash
+GOOGLE_CLIENT_ID=
+```
+
+Google Login is optional. To enable the Google Identity Services One Tap
+prompt, create an OAuth 2.0 **Web application** client ID in the
+[Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+add every served hostname to **Authorized JavaScript origins**, and set
+`GOOGLE_CLIENT_ID` in `.env`.
+
+The prompt is disabled when `GOOGLE_CLIENT_ID` is empty. The browser sends the
+Google credential to the backend, which verifies it against this client ID
+before storing the visitor profile and recording the login event. The client
+ID is public browser configuration; never put a client secret in the frontend
+or commit secrets to the repository.
+
+#### AI providers
+
+```bash
 AI_PROVIDER=google
 AI_CHAT_MODEL=gemini-3.5-flash-lite
 AI_CHAT_TEMPERATURE=0.7
@@ -177,50 +207,9 @@ OPENAI_API_KEY=
 OPENROUTER_API_KEY=
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 
-# Embeddings default to the same provider as AI_PROVIDER unless explicitly set.
-EMBEDDING_PROVIDER=google
-EMBEDDING_MODEL=gemini-embedding-001
-EMBEDDING_API_KEY=
-EMBEDDING_DIMENSIONS=768
-TOUCHPOINT_EMBEDDING_PROVIDER=google
-TOUCHPOINT_EMBEDDING_MODEL=gemini-embedding-001
-TOUCHPOINT_EMBEDDING_DIMENSIONS=768
-PGSQL_DB_URL=postgresql://postgres:password@localhost:5433/leo360
-
-# Gemini API key; Google Cloud credentials below are optional and separate
-# GOOGLE_APPLICATION_CREDENTIALS is only for Google Cloud APIs such as translation
-GOOGLE_APPLICATION_CREDENTIALS= 
-GEMINI_API_KEY=
-
-# Set Redis HOST and PORT 
-REDIS_USER_SESSION_HOST=localhost
-REDIS_USER_SESSION_PORT=6379
-
-# Set SMTP email information
-SMTP_HOST=""
-SMTP_PORT=587    
-SMTP_USER="" 
-SMTP_PASSWORD=""  
-USE_TLS=true 
-
-# in dev, disable HTTPS check certification
-PYTHONHTTPSVERIFY=1
-
-# Keycloak for leobot client at DEV mode
-KEYCLOAK_ENABLED=false
-KEYCLOAK_URL=https://leoid.example.com
-KEYCLOAK_REALM=master
-KEYCLOAK_CLIENT_ID=leobot
-KEYCLOAK_CLIENT_SECRET=""
-KEYCLOAK_CALLBACK_URL=https://leobot.example.com/_leoai/sso/callback
-KEYCLOAK_VERIFY_SSL=false
-
-# Set your Facebook Page Access here
-FB_VERIFY_TOKEN=""
-FB_PAGE_ACCESS_TOKEN=""
 ```
 
-**AI provider setup:**
+##### AI provider details
 
 | `AI_PROVIDER` | Default chat model | Default reasoning model | API key |
 | --- | --- | --- | --- |
@@ -234,6 +223,18 @@ only `AI_PROVIDER` and its API key is not enough: update both model IDs to
 models supported by the selected provider, or clear them to use that provider's
 defaults. `GEMINI_TEXT_MODEL_ID` is a Google-only fallback and can override both
 Google model defaults if the general `AI_*_MODEL` values are empty.
+
+#### Embedding providers
+
+```bash
+EMBEDDING_PROVIDER=google
+EMBEDDING_MODEL=gemini-embedding-001
+EMBEDDING_API_KEY=
+EMBEDDING_DIMENSIONS=768
+TOUCHPOINT_EMBEDDING_PROVIDER=google
+TOUCHPOINT_EMBEDDING_MODEL=gemini-embedding-001
+TOUCHPOINT_EMBEDDING_DIMENSIONS=768
+```
 
 Embeddings are configured separately from chat. The template explicitly sets
 both `EMBEDDING_PROVIDER` and `TOUCHPOINT_EMBEDDING_PROVIDER` to `google`. When
@@ -260,6 +261,63 @@ Get `GEMINI_API_KEY` at [Google AI Studio](https://aistudio.google.com/app/libra
 translation; it is not the Gemini API key. Google Cloud translation requires
 service-account credentials from the
 [Google Cloud Console](https://console.cloud.google.com/apis/api/translate.googleapis.com/credentials).
+
+#### Email / SMTP
+
+```bash
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+USE_TLS=true
+```
+
+Keep SMTP credentials in the deployment environment, not in source control.
+Use the SMTP settings required by the selected mail provider.
+
+#### Keycloak SSO
+
+Keycloak is disabled by default. Enable it only after configuring the
+Keycloak realm, client, callback URL, and client secret:
+
+```bash
+KEYCLOAK_ENABLED=false
+KEYCLOAK_URL=https://leoid.example.com
+KEYCLOAK_REALM=master
+KEYCLOAK_CLIENT_ID=leobot
+KEYCLOAK_CLIENT_SECRET=
+KEYCLOAK_CALLBACK_URL=https://leobot.example.com/_leoai/sso/callback
+KEYCLOAK_VERIFY_SSL=true
+```
+
+When `KEYCLOAK_ENABLED=true`, `KEYCLOAK_CLIENT_SECRET` is required. Use
+`KEYCLOAK_VERIFY_SSL=false` only for a local development Keycloak instance
+where certificate verification is intentionally unavailable.
+
+#### Database, Redis, and channel integrations
+
+The primary database and visitor-session settings are:
+
+```bash
+PGSQL_DB_URL=postgresql://<user>:<password>@<host>:<port>/<database>
+REDIS_USER_SESSION_HOST=127.0.0.1
+REDIS_USER_SESSION_PORT=6379
+REDIS_USER_SESSION_DB=0
+RATE_LIMIT_MAX_MESSAGES=20
+RATE_LIMIT_WINDOW_SECONDS=60
+```
+
+Facebook Messenger and Zalo OA webhooks use:
+
+```bash
+FB_VERIFY_TOKEN=
+FB_PAGE_ACCESS_TOKEN=
+ZALO_OA_ACCESS_TOKEN=
+```
+
+Dagster, Brave Search, Google Cloud translation, and other optional
+integrations are documented in the corresponding sections of
+[`.env.example.txt`](.env.example.txt).
 
 ---
 

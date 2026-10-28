@@ -4,6 +4,8 @@ class ChatbotState {
     this.profile = {
       visitorId: "",
       displayName: "friend",
+      email: "",
+      profileId: "",
       touchpointId: "",
       latitude: null,
       longitude: null,
@@ -53,6 +55,141 @@ class ChatbotUI {
 }
 
 var chatbotUI = new ChatbotUI();
+
+// Track a successful Google sign-in only after the server verifies its token.
+function trackGoogleLogin(profile) {
+  if (typeof CDP_TRACKING === "undefined" || CDP_TRACKING !== true) return;
+
+  var eventData = {
+    name: profile.name,
+    email: profile.email,
+  };
+  if (typeof window.trackEventLogin === "function") {
+    window.trackEventLogin(eventData);
+    return;
+  }
+
+  window.leoPendingLoginEvents = window.leoPendingLoginEvents || [];
+  window.leoPendingLoginEvents.push(eventData);
+}
+
+// Apply the verified Google profile without clearing an active conversation.
+function applyGoogleProfile(profile) {
+  if (!profile || typeof profile.name !== "string") return;
+
+  currentUserProfile.displayName = profile.name || "friend";
+  currentUserProfile.email = typeof profile.email === "string" ? profile.email : "";
+  currentUserProfile.profileId =
+    typeof profile.profile_id === "string" ? profile.profile_id : "";
+
+  var $status = $("#leobot_google_signin_status");
+  if ($status.length) {
+    $status
+      .text(getLeoUiText("googleSignedInAs", "Signed in as ") + currentUserProfile.displayName)
+      .removeClass("d-none");
+  }
+
+  var $greeting = $("#LEO_ChatBot_Container .leobot-answer .botui-message-content").first();
+  if ($greeting.length) {
+    $greeting.text(getGreetingMessage(currentUserProfile.displayName, getLeoUiLanguage()));
+  }
+
+  trackGoogleLogin({
+    name: currentUserProfile.displayName,
+    email: currentUserProfile.email,
+  });
+}
+
+var googleOneTapInitialized = false;
+var googleOneTapRequestInFlight = false;
+var googleOneTapAttempts = 0;
+var GOOGLE_ONE_TAP_MAX_ATTEMPTS = 40;
+
+function handleGoogleOneTapCredential(response) {
+  if (
+    googleOneTapRequestInFlight ||
+    !response ||
+    typeof response.credential !== "string" ||
+    !response.credential
+  ) {
+    return;
+  }
+
+  googleOneTapRequestInFlight = true;
+  getVisitorId()
+    .then(function (visitorId) {
+      callPostApi(
+        BASE_URL_GOOGLE_ONE_TAP,
+        { credential: response.credential, visitor_id: visitorId },
+        function (data) {
+          if (data && data.ok) {
+            applyGoogleProfile(data);
+          } else {
+            console.warn("Google One Tap sign-in was rejected.");
+          }
+          googleOneTapRequestInFlight = false;
+        },
+        function () {
+          console.warn("Unable to complete Google One Tap sign-in.");
+          googleOneTapRequestInFlight = false;
+        }
+      );
+    })
+    .catch(function (error) {
+      console.warn("Unable to resolve the visitor ID for Google One Tap.", error);
+      googleOneTapRequestInFlight = false;
+    });
+}
+
+window.handleGoogleOneTapCredential = handleGoogleOneTapCredential;
+
+// Wait for Google's async library, then display the non-blocking One Tap prompt.
+var startGoogleOneTapPrompt = function () {
+  if (
+    googleOneTapInitialized ||
+    typeof GOOGLE_ONE_TAP_CLIENT_ID !== "string" ||
+    !GOOGLE_ONE_TAP_CLIENT_ID ||
+    typeof window.google === "undefined" ||
+    !window.google.accounts ||
+    !window.google.accounts.id
+  ) {
+    if (
+      !googleOneTapInitialized &&
+      typeof GOOGLE_ONE_TAP_CLIENT_ID === "string" &&
+      GOOGLE_ONE_TAP_CLIENT_ID &&
+      googleOneTapAttempts < GOOGLE_ONE_TAP_MAX_ATTEMPTS
+    ) {
+      googleOneTapAttempts += 1;
+      window.setTimeout(startGoogleOneTapPrompt, 200);
+    } else if (
+      !googleOneTapInitialized &&
+      typeof GOOGLE_ONE_TAP_CLIENT_ID === "string" &&
+      GOOGLE_ONE_TAP_CLIENT_ID
+    ) {
+      console.warn("Google Identity Services did not load; skipping One Tap.");
+    }
+    return;
+  }
+
+  googleOneTapInitialized = true;
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_ONE_TAP_CLIENT_ID,
+    callback: window.handleGoogleOneTapCredential,
+    auto_select: false,
+    cancel_on_tap_outside: false,
+    context: "signin",
+  });
+  window.google.accounts.id.prompt(function (notification) {
+    if (
+      notification &&
+      typeof notification.isNotDisplayed === "function" &&
+      notification.isNotDisplayed()
+    ) {
+      console.debug("Google One Tap prompt was not displayed.");
+    }
+  });
+};
+window.startGoogleOneTapPrompt = startGoogleOneTapPrompt;
 
 // --- Localization and host-page events ---
 function getLeoUiText(key, fallback) {

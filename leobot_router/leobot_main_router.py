@@ -2,17 +2,23 @@ import asyncio
 import json
 import logging
 import time
+from collections.abc import Mapping
+from typing import Any
+import unicodedata
 from html import escape
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import (
     HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse,
 )
 from dagster_graphql import DagsterGraphQLClientError
+from google.auth.exceptions import GoogleAuthError, TransportError
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 from redis.exceptions import RedisError
 from leoai.geo_place_events import wait_for_geo_places_ready
 from leoai.chat_response_cache import ChatResponseCache
 from leoai.ai_intent_detection import IntentDetector, IntentType, RequestContext
-from leoai.leo_datamodel import GeolocationTouchpointRequest, Message
+from leoai.leo_datamodel import GoogleOneTapRequest, GeolocationTouchpointRequest, Message
 from leoai.leo_personalization import _build_recommended_actions
 from leoai.rag_agent import (
     DOCUMENT_CHAT_TOUCHPOINT_ID, RAGAgent,
@@ -27,6 +33,7 @@ from leoai.ai_core import is_ai_model_ready
 
 from main_config import (
     CDP_TRACKING,
+    GOOGLE_CLIENT_ID,
     HOSTNAME,
     LEOBOT_DEV_MODE,
     REDIS_CLIENT,
@@ -57,9 +64,106 @@ async def index(request: Request):
     """
     ts = int(time.time())
     data = {"request": request, "HOSTNAME": HOSTNAME,
-            "LEOBOT_DEV_MODE": LEOBOT_DEV_MODE, "CDP_TRACKING": CDP_TRACKING, "timestamp": ts}
+            "LEOBOT_DEV_MODE": LEOBOT_DEV_MODE, "CDP_TRACKING": CDP_TRACKING,
+            "GOOGLE_CLIENT_ID": GOOGLE_CLIENT_ID, "timestamp": ts}
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "index.html", data)
+
+
+# === Google One Tap Authentication ===
+def _verify_google_one_tap_credential(credential: str) -> Mapping[str, Any]:
+    """Verify a Google ID token and return only claims from the verified token."""
+    claims = id_token.verify_oauth2_token(
+        credential,
+        google_requests.Request(),
+        audience=GOOGLE_CLIENT_ID,
+    )
+    subject = claims.get("sub")
+    if not isinstance(subject, str) or not subject:
+        raise ValueError("Google credential did not contain a subject.")
+    return claims
+
+
+@router.post("/_leoai/auth/google/one-tap", response_class=JSONResponse)
+@router.post("/auth/google/one-tap", response_class=JSONResponse)
+async def authenticate_google_one_tap(payload: GoogleOneTapRequest):
+    """Verify a Google One Tap credential and attach its profile to the visitor."""
+    if not GOOGLE_CLIENT_ID:
+        return JSONResponse(
+            status_code=503,
+            content={"error": True, "detail": "Google One Tap is not configured."},
+        )
+
+    visitor_id = payload.visitor_id.strip()
+    if not visitor_id:
+        return JSONResponse(
+            status_code=400,
+            content={"error": True, "detail": "visitor_id is empty."},
+        )
+    if any(
+        character in "\x00\r\n" or unicodedata.category(character) == "Cf"
+        for character in visitor_id
+    ):
+        return JSONResponse(
+            status_code=400,
+            content={"error": True, "detail": "visitor_id contains invalid characters."},
+        )
+
+    try:
+        claims = await asyncio.to_thread(
+            _verify_google_one_tap_credential, payload.credential
+        )
+    except TransportError:
+        logger.exception("Google One Tap credential verification network failure")
+        return JSONResponse(
+            status_code=503,
+            content={"error": True, "detail": "Google sign-in is temporarily unavailable."},
+        )
+    except (GoogleAuthError, ValueError):
+        logger.info("Rejected invalid Google One Tap credential")
+        return JSONResponse(
+            status_code=401,
+            content={"error": True, "detail": "Invalid Google sign-in credential."},
+        )
+
+    subject = claims["sub"]
+    display_name = claims.get("name")
+    if not isinstance(display_name, str) or not display_name.strip():
+        display_name = "friend"
+    else:
+        display_name = display_name.strip()
+    email = claims.get("email")
+    if not isinstance(email, str) or claims.get("email_verified") is not True:
+        email = ""
+
+    profile_id = f"google:{subject}"
+    try:
+        await asyncio.to_thread(
+            REDIS_CLIENT.hset,
+            visitor_id,
+            mapping={
+                "profile_id": profile_id,
+                "google_sub": subject,
+                "auth_provider": "google",
+                "name": display_name,
+                "email": email,
+            },
+        )
+        await chat_response_cache.invalidate_visitor(visitor_id)
+    except RedisError:
+        logger.exception("Unable to persist Google One Tap profile for visitor %s", visitor_id)
+        return JSONResponse(
+            status_code=503,
+            content={"error": True, "detail": "Unable to save Google sign-in."},
+        )
+
+    return {
+        "ok": True,
+        "name": display_name,
+        "email": email,
+        "profile_id": profile_id,
+        "provider": "google",
+    }
 
 
 # === Main Chat API ===

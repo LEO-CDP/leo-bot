@@ -30,6 +30,13 @@ class Message(BaseModel):
     )
 
 
+class GoogleOneTapRequest(BaseModel):
+    """Credential returned by the Google Identity Services One Tap prompt."""
+
+    credential: str = Field(..., min_length=1, max_length=8192)
+    visitor_id: str = Field(..., min_length=1, max_length=255)
+
+
 class GeolocationTouchpointRequest(BaseModel):
     visitor_id: str = Field(..., min_length=1, max_length=255)
     touchpoint_id: Optional[str] = Field(None, max_length=64)

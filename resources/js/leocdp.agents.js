@@ -49,7 +49,8 @@
       chatPlaceholder: "Bạn muốn tìm gì?",
       emptyQuestion: "Vui lòng nhập câu hỏi hoặc số của địa điểm.",
       networkError: "Không thể gửi tin nhắn. Vui lòng thử lại.",
-      assistantLoadError: "Không thể tải LEO. Vui lòng tải lại trang và thử lại."
+      assistantLoadError: "Không thể tải LEO. Vui lòng tải lại trang và thử lại.",
+      googleSignedInAs: "Đã đăng nhập: "
     },
     en: {
       help: "Help",
@@ -98,7 +99,8 @@
       chatPlaceholder: "What would you like to find?",
       emptyQuestion: "Please enter a question or a place number.",
       networkError: "Unable to send your message. Please try again.",
-      assistantLoadError: "LEO could not load. Please refresh the page and try again."
+      assistantLoadError: "LEO could not load. Please refresh the page and try again.",
+      googleSignedInAs: "Signed in as "
     }
   };
 
@@ -361,5 +363,8 @@
 
     applyLanguage(window.LEO_UI_LANGUAGE);
     startChatbot();
+    if (typeof window.startGoogleOneTapPrompt === "function") {
+      window.startGoogleOneTapPrompt();
+    }
   });
 })(jQuery, window, document);

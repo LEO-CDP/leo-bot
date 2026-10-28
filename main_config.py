@@ -68,6 +68,9 @@ FB_VERIFY_TOKEN = os.getenv("FB_VERIFY_TOKEN")
 # --- Gemini API ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+# --- Google Identity Services ---
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+
 # --- Zalo OA Token ---
 ZALO_OA_ACCESS_TOKEN = os.getenv("ZALO_OA_ACCESS_TOKEN")
 

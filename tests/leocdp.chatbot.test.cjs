@@ -39,6 +39,7 @@ function setupChat() {
   function jquery() {
     return {
       find() { return this; },
+      first() { return this; },
       on() { return this; },
       trigger() { return this; },
       slice() { return this; },
@@ -116,6 +117,58 @@ test("loads the greeting without waiting for optional geolocation", async () => 
   await Promise.resolve();
 
   assert.equal(greetedName, "Ada");
+});
+
+test("sends a verified Google One Tap credential for the current visitor", async () => {
+  const chat = setupChat();
+  let initializeOptions;
+  let loginEvent;
+  chat.context.CDP_TRACKING = true;
+  chat.context.window.trackEventLogin = eventData => {
+    loginEvent = eventData;
+  };
+  chat.context.GOOGLE_ONE_TAP_CLIENT_ID = "web-client-id";
+  chat.context.BASE_URL_GOOGLE_ONE_TAP = "https://leobot.test/auth/google/one-tap";
+  chat.context.lscache.get = () => "visitor";
+  chat.context.window.google = {
+    accounts: {
+      id: {
+        initialize(options) {
+          initializeOptions = options;
+        },
+        prompt() {},
+      },
+    },
+  };
+
+  chat.context.startGoogleOneTapPrompt();
+  assert.equal(initializeOptions.client_id, "web-client-id");
+  assert.equal(initializeOptions.auto_select, false);
+
+  chat.context.handleGoogleOneTapCredential({ credential: "signed-token" });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(chat.requests.length, 1);
+  assert.equal(
+    chat.requests[0].options.url,
+    "https://leobot.test/auth/google/one-tap"
+  );
+  assert.deepEqual(JSON.parse(chat.requests[0].options.data), {
+    credential: "signed-token",
+    visitor_id: "visitor",
+  });
+
+  chat.requests[0].success({
+    ok: true,
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    profile_id: "google:subject",
+  });
+  assert.equal(chat.context.currentUserProfile.displayName, "Ada Lovelace");
+  assert.equal(chat.context.currentUserProfile.profileId, "google:subject");
+  assert.equal(loginEvent.name, "Ada Lovelace");
+  assert.equal(loginEvent.email, "ada@example.com");
 });
 
 for (const choice of ["1", "2", "3", "4", "5", " 4 "]) {

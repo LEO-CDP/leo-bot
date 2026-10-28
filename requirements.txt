@@ -17,6 +17,7 @@ urllib3
 langgraph>=1.2.14,<2
 google-genai
 google-api-core
+google-auth
 google-cloud-translate
 openai
 fastembed
